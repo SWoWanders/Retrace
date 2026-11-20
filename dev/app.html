@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<title>Retrace — walk video to 3D street</title>
+<style>
+  :root{--bg:#0b0f17;--panel:#121a27;--line:#24324a;--ink:#e6edf7;--dim:#8a9ab3;--acc:#38e1c6;--acc2:#ffb347;--err:#ff5f6d}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  button,input,select{font:inherit;color:inherit}
+  .hidden{display:none!important}
+  h1{font:800 26px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;margin:0}
+  h1 span{color:var(--acc)}
+  .sub{color:var(--dim);margin:6px 0 0;font-size:14px}
+  .wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:14px}
+  .pick{display:flex;align-items:center;justify-content:center;gap:10px;border:2px dashed var(--line);border-radius:12px;padding:22px;cursor:pointer;color:var(--dim);text-align:center}
+  .pick:hover{border-color:var(--acc);color:var(--ink)}
+  .pick input{display:none}
+  video#vid{width:100%;max-height:42vh;border-radius:10px;background:#000;margin-top:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}
+  label.f input[type=number],label.f select{background:#0d1420;border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  label.f .val{color:var(--ink);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .btn{background:var(--acc);color:#04221d;border:0;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .btn.warn{background:var(--acc2);color:#2b1700}
+  .btn:disabled{opacity:.45;cursor:default}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .wide{width:100%}
+  .tips{color:var(--dim);font-size:13px;margin:10px 0 0;padding-left:18px}
+  .bar{height:8px;background:#0d1420;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .2s}
+  #pstat{font-variant-numeric:tabular-nums;margin:10px 0 4px;min-height:1.4em}
+  #pdet{color:var(--dim);font-size:13px;min-height:1.3em}
+  #pcan{width:100%;border-radius:8px;margin-top:10px;background:#000;image-rendering:pixelated}
+  /* viewer */
+  #viewer{position:fixed;inset:0;background:#000}
+  #stage{position:absolute;inset:0}
+  #stage canvas{display:block;width:100%;height:100%;touch-action:none}
+  .top{position:absolute;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:calc(env(safe-area-inset-top) + 10px) 10px 10px;background:linear-gradient(#000a,#0000)}
+  .top h1{font-size:16px;flex:1}
+  .ib{background:#0b0f17cc;border:1px solid var(--line);border-radius:10px;padding:8px 11px;cursor:pointer;backdrop-filter:blur(6px)}
+  .ib.on{border-color:var(--acc);color:var(--acc)}
+  .bottom{position:absolute;left:0;right:0;bottom:0;padding:10px 10px calc(env(safe-area-inset-bottom) + 12px);background:linear-gradient(#0000,#000c)}
+  .seg{display:flex;background:#0b0f17cc;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{background:none;border:0;padding:8px 12px;cursor:pointer;color:var(--dim)}
+  .seg button.on{background:var(--acc);color:#04221d;font-weight:700}
+  #play{width:46px;height:46px;border-radius:50%;padding:0;font-size:18px}
+  #scrub{flex:1}
+  #tlabel{font:12px ui-monospace,monospace;color:var(--dim);min-width:74px;text-align:right}
+  #inset{position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 62px);width:34vw;max-width:260px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
+  #inset video{display:block;width:100%;max-height:none;margin:0;border-radius:0}
+  #recdot{position:absolute;left:12px;top:calc(env(safe-area-inset-top) + 60px);background:var(--err);color:#fff;border-radius:20px;padding:4px 10px;font-size:13px;font-weight:700}
+  .sheet{position:absolute;left:0;right:0;bottom:0;max-height:78vh;overflow:auto;background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 18px);box-shadow:0 -10px 40px #000a}
+  .sheet h3{margin:4px 0 10px;font-size:14px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+  .sheet .grid{margin-bottom:12px}
+  .chk{display:flex;gap:8px;align-items:center;font-size:14px}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .chips::-webkit-scrollbar{display:none}
+  .chips button{flex:0 0 auto;background:#0b0f17cc;border:1px solid var(--line);border-radius:18px;padding:7px 12px;color:var(--dim);cursor:pointer;font-size:14px}
+  .chips button.on{background:var(--acc);border-color:var(--acc);color:#04221d;font-weight:700}
+  #busy{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;z-index:40;flex-direction:column;gap:12px;text-align:center;padding:20px}
+  #busy .bar{width:min(80vw,360px)}
+  #shots button{background:#0b0f17cc;border:1px solid var(--line);border-radius:16px;padding:4px 11px;color:var(--dim);cursor:pointer;font-size:13px}
+  #shots button.on{border-color:var(--acc);color:var(--acc)}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translateX(-50%);background:#101826f2;border:1px solid var(--line);border-left:4px solid var(--acc);padding:10px 14px;border-radius:10px;max-width:92vw;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;font-size:14px}
+  #toast.show{opacity:1}
+  #toast.err{border-left-color:var(--err)}
+  #toast.warn{border-left-color:var(--acc2)}
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP ============ -->
+<section id="setup" class="wrap">
+  <h1>RE<span>TRACE</span></h1>
+  <p class="sub">Turn a walking video into a simple 3D street you can fly through along the same path. Everything runs on this device. No uploads, no accounts, no cost.</p>
+
+  <div class="card">
+    <label class="pick" id="pickLbl"><input type="file" id="file" accept="video/*">
+      <span>🎥 <b>Choose a video</b><br><small>a slow, steady walk works best (5–40 s)</small></span></label>
+    <div id="vidHome"><video id="vid" class="hidden" playsinline muted preload="auto"></video></div>
+  </div>
+
+  <div class="card" id="settings">
+    <div class="grid">
+      <label class="f">Start (s)<input type="number" id="tstart" value="0" min="0" step="0.1"></label>
+      <label class="f">End (s)<input type="number" id="tend" value="0" min="0" step="0.1"></label>
+      <label class="f">Frames per second <span class="val" id="fpsV">4</span><input type="range" id="fps" min="2" max="10" value="4"></label>
+      <label class="f">Max frames <span class="val" id="maxfV">120</span><input type="range" id="maxf" min="30" max="300" step="10" value="120"></label>
+      <label class="f">Camera field of view <span class="val" id="fovV">70°</span><input type="range" id="fov" min="40" max="120" value="70"></label>
+      <label class="f">Run on<select id="dq"><option value="auto">Auto (GPU if available)</option><option value="wasm">CPU only (slower)</option></select></label>
+      <label class="f">Depth detail<select id="dmodel"><option value="small">Standard (fast, ~27–100 MB)</option><option value="base">High (slower, ~100–400 MB · non-commercial licence)</option></select></label>
+    </div>
+    <div class="row" style="margin-top:12px;gap:14px">
+      <label class="chk"><input type="checkbox" id="rmMovers" checked> Remove people &amp; vehicles</label>
+      <label class="chk"><input type="checkbox" id="cuts" checked> Split at scene cuts</label>
+    </div>
+    <button class="btn wide" id="go" style="margin-top:14px" disabled>Build 3D street</button>
+    <ul class="tips">
+      <li>Walk forward smoothly. Avoid spinning on the spot or pointing into the sun.</li>
+      <li>FOV: ~70° for a normal phone camera, ~100–120° for ultra-wide or action cams.</li>
+      <li>People and vehicles are cut out of the blocks and shown as a live 3D layer instead (small extra model, ~4–15 MB).</li>
+      <li>Edited videos: each shot becomes its own piece, placed side by side. Still-camera shots become a <b>diorama</b>: a frozen 3D set with the moving parts playing inside it.</li>
+      <li>Anything else works too (dancing, animation, screen recordings…). Shots where the camera can't be tracked become a <b>3D video stage</b>, where every frame plays as a moving 3D surface.</li>
+      <li>The first run downloads a free depth model (~27–100 MB), which is cached after that.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ PROCESSING ============ -->
+<section id="proc" class="wrap hidden">
+  <h1>RE<span>TRACE</span></h1>
+  <div class="card">
+    <div class="bar"><i id="pbar"></i></div>
+    <div id="pstat">Starting…</div>
+    <div id="pdet"></div>
+    <canvas id="pcan" width="720" height="202"></canvas>
+    <div class="row" style="margin-top:12px">
+      <button class="btn ghost" id="cancel">Stop &amp; use what's done</button>
+    </div>
+    <p class="tips" style="padding:0;list-style:none">Keep this screen on. Left: tracked points (green = agrees with the motion, red tint = people/vehicles). Right: estimated depth (bright = near).</p>
+  </div>
+</section>
+
+<!-- ============ VIEWER ============ -->
+<section id="viewer" class="hidden">
+  <div id="stage"></div>
+  <div class="top">
+    <h1>RE<span>TRACE</span></h1>
+    <button class="ib on" id="bInset" title="Show original video">🎞</button>
+    <button class="ib" id="bSound" title="Sound">🔇</button>
+    <button class="ib" id="bSet" title="Settings &amp; export">⚙</button>
+    <button class="ib" id="bNew" title="New video">＋</button>
+  </div>
+  <div id="inset"></div>
+  <div id="recdot" class="hidden">● REC</div>
+  <div class="bottom">
+    <div class="row hidden" id="shots" style="margin-bottom:8px;justify-content:center"></div>
+    <div class="row" style="margin-bottom:10px;justify-content:center">
+      <div class="seg" id="modeSeg">
+        <button data-m="ride" class="on">Ride</button><button data-m="chase">Chase</button><button data-m="orbit">Orbit</button>
+      </div>
+    </div>
+    <div class="chips" id="styleSeg">
+      <button data-s="blocks" class="on">▣ Blocks</button><button data-s="tiles">◆ Tiles</button><button data-s="spheres">● Spheres</button><button data-s="points">· Points</button><button data-s="wire">⌗ Wire</button><button data-s="sheets">▤ Sheets</button><button data-s="video3d">◎ 3D Video</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="play">▶</button>
+      <input type="range" id="scrub" min="0" max="1" step="0.01" value="0">
+      <span id="tlabel">0.0 s</span>
+    </div>
+  </div>
+
+  <div class="sheet hidden" id="sheet">
+    <div class="row" style="justify-content:space-between"><h3>Look</h3><button class="ib" id="bClose">✕</button></div>
+    <div class="grid">
+      <label class="f" style="grid-column:1/-1">Palette<select id="palSel"></select></label>
+      <label class="f">Piece size <span class="val" id="voxV"></span><input type="range" id="vox" min="0.06" max="1" step="0.02" value="0.24"></label>
+      <label class="f">Far cutoff <span class="val" id="farV"></span><input type="range" id="far" min="0" max="0.4" step="0.01" value="0.07"></label>
+      <label class="f">Noise filter <span class="val" id="hitsV"></span><input type="range" id="hits" min="1" max="8" step="1" value="2"></label>
+      <label class="f">Posterize (Original) <span class="val" id="palV"></span><input type="range" id="pal" min="0" max="12" step="1" value="0"></label>
+      <label class="f">Use every Nth frame <span class="val" id="strV"></span><input type="range" id="str" min="1" max="6" step="1" value="2"></label>
+      <label class="f">Path smoothing <span class="val" id="smV"></span><input type="range" id="sm" min="0" max="8" step="1" value="2"></label>
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <label class="chk"><input type="checkbox" id="adaptive" checked> Size by distance</label>
+      <label class="chk"><input type="checkbox" id="lit" checked> Lighting</label>
+      <label class="chk"><input type="checkbox" id="showPath" checked> Path</label>
+      <label class="chk"><input type="checkbox" id="showGrid"> Grid</label>
+      <label class="chk"><input type="checkbox" id="fogOn" checked> Fog</label>
+      <label class="chk"><input type="checkbox" id="liveOn" checked> Live layer</label>
+      <label class="chk"><input type="checkbox" id="sway" checked> Diorama sway</label>
+      <label class="chk"><input type="checkbox" id="useMask" checked> Cut movers from blocks</label>
+    </div>
+    <h3>Export</h3>
+    <div class="grid">
+      <label class="f">Video format<select id="recFmt"><option value="mp4">MP4 (frame-perfect render)</option><option value="webm">WebM (live screen capture)</option></select></label>
+      <label class="f">Video size<select id="recSize"><option value="1280">720p</option><option value="1920">1080p</option></select></label>
+    </div>
+    <div class="row" style="margin-bottom:10px"><label class="chk"><input type="checkbox" id="recAudio" checked> Include original audio</label></div>
+    <div class="row">
+      <button class="btn warn" id="bRec">● Render fly-through video</button>
+      <button class="btn ghost" id="bGlb">3D model (.glb)</button>
+      <button class="btn ghost" id="bPath">Camera path (.json)</button>
+    </div>
+    <p class="tips" style="padding:0;list-style:none" id="stats"></p>
+  </div>
+</section>
+
+<div id="busy" class="hidden"><div id="busyT">Rendering…</div><div class="bar"><i id="busyBar"></i></div><button class="btn ghost" id="busyCancel">Cancel</button></div>
+<div id="toast"></div>
+
+<script id="core">
+/*__CORE__*/
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+/*__APP__*/
+</script>
+</body>
+</html>

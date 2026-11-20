@@ -59,6 +59,12 @@
   .sheet h3{margin:4px 0 10px;font-size:14px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
   .sheet .grid{margin-bottom:12px}
   .chk{display:flex;gap:8px;align-items:center;font-size:14px}
+  .chips{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .chips::-webkit-scrollbar{display:none}
+  .chips button{flex:0 0 auto;background:#0b0f17cc;border:1px solid var(--line);border-radius:18px;padding:7px 12px;color:var(--dim);cursor:pointer;font-size:14px}
+  .chips button.on{background:var(--acc);border-color:var(--acc);color:#04221d;font-weight:700}
+  #busy{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;z-index:40;flex-direction:column;gap:12px;text-align:center;padding:20px}
+  #busy .bar{width:min(80vw,360px)}
   #shots button{background:#0b0f17cc;border:1px solid var(--line);border-radius:16px;padding:4px 11px;color:var(--dim);cursor:pointer;font-size:13px}
   #shots button.on{border-color:var(--acc);color:var(--acc)}
   #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translateX(-50%);background:#101826f2;border:1px solid var(--line);border-left:4px solid var(--acc);padding:10px 14px;border-radius:10px;max-width:92vw;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;font-size:14px}
@@ -87,7 +93,8 @@
       <label class="f">Frames per second <span class="val" id="fpsV">4</span><input type="range" id="fps" min="2" max="10" value="4"></label>
       <label class="f">Max frames <span class="val" id="maxfV">120</span><input type="range" id="maxf" min="30" max="300" step="10" value="120"></label>
       <label class="f">Camera field of view <span class="val" id="fovV">70°</span><input type="range" id="fov" min="40" max="120" value="70"></label>
-      <label class="f">Depth quality<select id="dq"><option value="auto">Auto (GPU if available)</option><option value="wasm">CPU only (slower)</option></select></label>
+      <label class="f">Run on<select id="dq"><option value="auto">Auto (GPU if available)</option><option value="wasm">CPU only (slower)</option></select></label>
+      <label class="f">Depth detail<select id="dmodel"><option value="small">Standard (fast, ~27–100 MB)</option><option value="base">High (slower, ~100–400 MB · non-commercial licence)</option></select></label>
     </div>
     <div class="row" style="margin-top:12px;gap:14px">
       <label class="chk"><input type="checkbox" id="rmMovers" checked> Remove people &amp; vehicles</label>
@@ -99,6 +106,7 @@
       <li>FOV: ~70° for a normal phone camera, ~100–120° for ultra-wide or action cams.</li>
       <li>People and vehicles are cut out of the blocks and shown as a live 3D layer instead (small extra model, ~4–15 MB).</li>
       <li>Edited videos: each shot becomes its own piece, placed side by side. Still-camera shots become a <b>diorama</b>: a frozen 3D set with the moving parts playing inside it.</li>
+      <li>Anything else works too (dancing, animation, screen recordings…). Shots where the camera can't be tracked become a <b>3D video stage</b>, where every frame plays as a moving 3D surface.</li>
       <li>The first run downloads a free depth model (~27–100 MB), which is cached after that.</li>
     </ul>
   </div>
@@ -137,9 +145,9 @@
       <div class="seg" id="modeSeg">
         <button data-m="ride" class="on">Ride</button><button data-m="chase">Chase</button><button data-m="orbit">Orbit</button>
       </div>
-      <div class="seg" id="styleSeg">
-        <button data-s="voxels" class="on">Blocks</button><button data-s="points">Points</button>
-      </div>
+    </div>
+    <div class="chips" id="styleSeg">
+      <button data-s="blocks" class="on">▣ Blocks</button><button data-s="tiles">◆ Tiles</button><button data-s="spheres">● Spheres</button><button data-s="points">· Points</button><button data-s="wire">⌗ Wire</button><button data-s="sheets">▤ Sheets</button><button data-s="video3d">◎ 3D Video</button>
     </div>
     <div class="row">
       <button class="btn" id="play">▶</button>
@@ -151,14 +159,16 @@
   <div class="sheet hidden" id="sheet">
     <div class="row" style="justify-content:space-between"><h3>Look</h3><button class="ib" id="bClose">✕</button></div>
     <div class="grid">
-      <label class="f">Block size <span class="val" id="voxV"></span><input type="range" id="vox" min="0.06" max="1" step="0.02" value="0.24"></label>
+      <label class="f" style="grid-column:1/-1">Palette<select id="palSel"></select></label>
+      <label class="f">Piece size <span class="val" id="voxV"></span><input type="range" id="vox" min="0.06" max="1" step="0.02" value="0.24"></label>
       <label class="f">Far cutoff <span class="val" id="farV"></span><input type="range" id="far" min="0" max="0.4" step="0.01" value="0.07"></label>
       <label class="f">Noise filter <span class="val" id="hitsV"></span><input type="range" id="hits" min="1" max="8" step="1" value="2"></label>
-      <label class="f">Palette <span class="val" id="palV"></span><input type="range" id="pal" min="0" max="12" step="1" value="0"></label>
+      <label class="f">Posterize (Original) <span class="val" id="palV"></span><input type="range" id="pal" min="0" max="12" step="1" value="0"></label>
       <label class="f">Use every Nth frame <span class="val" id="strV"></span><input type="range" id="str" min="1" max="6" step="1" value="2"></label>
       <label class="f">Path smoothing <span class="val" id="smV"></span><input type="range" id="sm" min="0" max="8" step="1" value="2"></label>
     </div>
     <div class="row" style="margin-bottom:14px">
+      <label class="chk"><input type="checkbox" id="adaptive" checked> Size by distance</label>
       <label class="chk"><input type="checkbox" id="lit" checked> Lighting</label>
       <label class="chk"><input type="checkbox" id="showPath" checked> Path</label>
       <label class="chk"><input type="checkbox" id="showGrid"> Grid</label>
@@ -168,8 +178,13 @@
       <label class="chk"><input type="checkbox" id="useMask" checked> Cut movers from blocks</label>
     </div>
     <h3>Export</h3>
+    <div class="grid">
+      <label class="f">Video format<select id="recFmt"><option value="mp4">MP4 (frame-perfect render)</option><option value="webm">WebM (live screen capture)</option></select></label>
+      <label class="f">Video size<select id="recSize"><option value="1280">720p</option><option value="1920">1080p</option></select></label>
+    </div>
+    <div class="row" style="margin-bottom:10px"><label class="chk"><input type="checkbox" id="recAudio" checked> Include original audio</label></div>
     <div class="row">
-      <button class="btn warn" id="bRec">● Record fly-through (.webm)</button>
+      <button class="btn warn" id="bRec">● Render fly-through video</button>
       <button class="btn ghost" id="bGlb">3D model (.glb)</button>
       <button class="btn ghost" id="bPath">Camera path (.json)</button>
     </div>
@@ -177,6 +192,7 @@
   </div>
 </section>
 
+<div id="busy" class="hidden"><div id="busyT">Rendering…</div><div class="bar"><i id="busyBar"></i></div><button class="btn ghost" id="busyCancel">Cancel</button></div>
 <div id="toast"></div>
 
 <script id="core">
@@ -679,13 +695,83 @@
     return { M, T: [-c0[0], -groundY, -c0[2]], planeFound: !!plane };
   }
 
-  // frames: [{rgb, dn(Uint16), s, R, t}], K, W, H. params: {stride, step, far, voxel, minHits, levels, eps}
+  // ================= palettes =================
+  const PALETTES = {
+    original: { name: 'Original', mode: 'original' },
+    c64: { name: 'C64', mode: 'palette', colors: '000000 ffffff 880000 aaffee cc44cc 00cc55 0000aa eeee77 dd8855 664400 ff7777 333333 777777 aaff66 0088ff bbbbbb' },
+    nes: { name: 'NES', mode: 'palette', colors: '000000 7c7c7c bcbcbc f8f8f8 0000fc 0078f8 3cbcfc a4e4fc 940084 d800cc f878f8 a81000 f83800 f87858 503000 ac7c00 f8b800 f8d878 007800 00b800 58d854 b8f818 004058 008888 00e8d8' },
+    pico8: { name: 'PICO-8', mode: 'palette', colors: '000000 1d2b53 7e2553 008751 ab5236 5f574f c2c3c7 fff1e8 ff004d ffa300 ffec27 00e436 29adff 83769c ff77a8 ffccaa' },
+    gameboy: { name: 'Game Boy', mode: 'palette', colors: '0f380f 306230 8bac0f 9bbc0f' },
+    cga: { name: 'CGA', mode: 'palette', colors: '000000 55ffff ff55ff ffffff' },
+    noir: { name: 'Noir', mode: 'palette', colors: '000000 2a2a2a 555555 808080 aaaaaa d5d5d5 ffffff' },
+    sepia: { name: 'Sepia', mode: 'palette', colors: '1e130a 3b2614 5a3d1e 7d5a33 a07c4f c3a271 e3caa0 f6ead0' },
+    autumn: { name: 'Autumn', mode: 'palette', colors: '1c0f06 3d1c02 7a3b0c b85c1a e08e2b f2c14e 6b7d3a 3a4a24 c9b79c' },
+    synthwave: { name: 'Synthwave', mode: 'palette', colors: '0d0221 261447 2e2157 541388 f706cf fd3777 ff4365 f9c80e 00f0ff 2de2e6' },
+    vapor: { name: 'Vaporwave', mode: 'palette', colors: '2a2a4a ff71ce 01cdfe 05ffa1 b967ff fffb96 f4f4f4' },
+    blueprint: { name: 'Blueprint', mode: 'palette', colors: '0a1f44 123a7a 1f5bbf 4f8ff7 a9c9ff eef5ff' },
+    thermal: { name: 'Thermal (by depth)', mode: 'depth', colors: 'fcfdbf fe9f6d de4968 8c2981 3b0f70 000004', range: 4 },
+    height: { name: 'Rainbow (by height)', mode: 'height', colors: '30123b 4686fb 1be5b5 a4fc3c fbb938 e4460a 7a0403', range: 1.2 },
+    ice: { name: 'Ice (by depth)', mode: 'depth', colors: 'ffffff c6ecff 7cc8f2 2f8ccf 0d4a8a 041a3a', range: 4 },
+  };
+  const hexRgb = h => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  const lutCache = new Map();
+  // returns col(r,g,b,y,z) -> [R,G,B] sRGB 0..255 (shared array, copy if you keep it)
+  function makeColorizer(spec, sceneScale, levels) {
+    spec = typeof spec === 'string' ? PALETTES[spec] || PALETTES.original : spec || PALETTES.original;
+    sceneScale = sceneScale || 10;
+    const out = [0, 0, 0];
+    if (spec.mode === 'palette') {
+      const cols = spec.colors.split(' ').map(hexRgb);
+      let lut = lutCache.get(spec.colors);
+      if (!lut) {
+        lut = new Uint8Array(32768);
+        for (let i = 0; i < 32768; i++) {
+          const r = ((i >> 10) & 31) * 8 + 4, g = ((i >> 5) & 31) * 8 + 4, b = (i & 31) * 8 + 4;
+          let best = 1e18, bi = 0;
+          for (let k = 0; k < cols.length; k++) {
+            const c = cols[k], rm = (r + c[0]) / 2, dr = r - c[0], dg = g - c[1], db = b - c[2];
+            const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db; // "redmean" distance
+            if (d < best) { best = d; bi = k; }
+          }
+          lut[i] = bi;
+        }
+        lutCache.set(spec.colors, lut);
+      }
+      const f = (r, g, b) => { const c = cols[lut[((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)]]; out[0] = c[0]; out[1] = c[1]; out[2] = c[2]; return out; };
+      f.sky = (r, g, b) => f(r, g, b).slice();
+      return f;
+    }
+    if (spec.mode === 'depth' || spec.mode === 'height') {
+      const cols = spec.colors.split(' ').map(hexRgb), n = cols.length - 1, range = sceneScale * (spec.range || 3), byDepth = spec.mode === 'depth';
+      const f = (r, g, b, y, z) => {
+        let t = (byDepth ? z : y) / range; t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const k = Math.min(n - 1, Math.floor(t * n)), a = t * n - k, c0 = cols[k], c1 = cols[k + 1];
+        const lum = 0.55 + 0.45 * (0.299 * r + 0.587 * g + 0.114 * b) / 255; // keep a hint of the real shading
+        out[0] = Math.min(255, (c0[0] + (c1[0] - c0[0]) * a) * lum); out[1] = Math.min(255, (c0[1] + (c1[1] - c0[1]) * a) * lum); out[2] = Math.min(255, (c0[2] + (c1[2] - c0[2]) * a) * lum);
+        return out;
+      };
+      f.sky = () => { const c = cols[byDepth ? n : 0]; return [c[0] * 0.5, c[1] * 0.5, c[2] * 0.5]; };
+      return f;
+    }
+    const L = levels > 1 ? levels - 1 : 0;
+    const f = L ? (r, g, b) => { out[0] = Math.round(r / 255 * L) / L * 255; out[1] = Math.round(g / 255 * L) / L * 255; out[2] = Math.round(b / 255 * L) / L * 255; return out; }
+      : (r, g, b) => { out[0] = r; out[1] = g; out[2] = b; return out; };
+    f.sky = (r, g, b) => f(r, g, b).slice();
+    return f;
+  }
+  const lin = v => SRGB2LIN[v < 0 ? 0 : v > 255 ? 255 : Math.round(v)];
+
+  // depth-map point in camera (three convention) + world transform helpers
+  function camPoint(x, y, z, K) { return [(x - K.cx) / K.fx * z, -(y - K.cy) / K.fy * z, -z]; }
+
+  // frames: [{rgb, dn(Uint16), s, R, t, mask}], K, W, H.
+  // params: {stride, step, far, voxel, adaptive, minHits, eps, edge, sceneScale, palette, levels, normals, blocks, useMask}
   function buildWorld(frames, W, H, K, params, align) {
-    const P = Object.assign({ stride: 2, step: 3, far: 0.06, voxel: 0.25, minHits: 2, levels: 0, eps: 0.06, edge: 1.12, sceneScale: 10 }, params);
+    const P = Object.assign({ stride: 2, step: 3, far: 0.06, voxel: 0.24, adaptive: true, minHits: 2, levels: 0, eps: 0.06, edge: 1.12, sceneScale: 10, palette: 'original', normals: false, blocks: true }, params);
     const poses = frames.map(f => poseToThree(f.R, f.t));
     const step = P.step, eps = P.eps, inv16 = 1 / 65535;
-    const nF = Math.ceil(frames.length / P.stride), perF = Math.ceil(W / step) * Math.ceil(H / step);
-    let pos = new Float32Array(nF * perF * 3), col = new Uint8Array(nF * perF * 3), np = 0;
+    const nF = Math.ceil(frames.length / P.stride), perF = Math.ceil(W / step) * Math.ceil(H / step), cap = nF * perF;
+    let pos = new Float32Array(cap * 3), srgb = new Uint8Array(cap * 3), zs = new Float32Array(cap), nrm = P.normals ? new Float32Array(cap * 3) : null, np = 0;
     const ground = [];
     for (let fi = 0; fi < frames.length; fi += P.stride) {
       const f = frames[fi], pose = poses[fi], M = pose.M, Cc = pose.C, dn = f.dn, rgb = f.rgb, mask = P.useMask === false ? null : f.mask;
@@ -695,13 +781,22 @@
         const z = f.s / (d + eps), z1 = f.s / (dn[i + step] * inv16 + eps), z2 = f.s / (dn[i + step * W] * inv16 + eps);
         const r1 = z / z1, r2 = z / z2;
         if (r1 > P.edge || r1 < 1 / P.edge || r2 > P.edge || r2 < 1 / P.edge) continue; // flying pixels at depth edges
-        // camera-space point in three convention: (x, -y, -z)
         const cx = (x - K.cx) / K.fx * z, cy = -(y - K.cy) / K.fy * z, cz = -z;
         const wx = M[0] * cx + M[1] * cy + M[2] * cz + Cc[0];
         const wy = M[3] * cx + M[4] * cy + M[5] * cz + Cc[1];
         const wz = M[6] * cx + M[7] * cy + M[8] * cz + Cc[2];
         pos[np * 3] = wx; pos[np * 3 + 1] = wy; pos[np * 3 + 2] = wz;
-        col[np * 3] = rgb[i * 3]; col[np * 3 + 1] = rgb[i * 3 + 1]; col[np * 3 + 2] = rgb[i * 3 + 2];
+        srgb[np * 3] = rgb[i * 3]; srgb[np * 3 + 1] = rgb[i * 3 + 1]; srgb[np * 3 + 2] = rgb[i * 3 + 2];
+        zs[np] = z;
+        if (nrm) { // surface normal from neighbouring depth samples, facing the camera
+          const ax = (x + step - K.cx) / K.fx * z1 - cx, ay = -(y - K.cy) / K.fy * z1 - cy, az = -z1 - cz;
+          const bx = (x - K.cx) / K.fx * z2 - cx, by = -(y + step - K.cy) / K.fy * z2 - cy, bz = -z2 - cz;
+          let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+          if (nx * -cx + ny * -cy + nz * -cz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+          const l = Math.hypot(nx, ny, nz) || 1;
+          nx /= l; ny /= l; nz /= l;
+          nrm[np * 3] = M[0] * nx + M[1] * ny + M[2] * nz; nrm[np * 3 + 1] = M[3] * nx + M[4] * ny + M[5] * nz; nrm[np * 3 + 2] = M[6] * nx + M[7] * ny + M[8] * nz;
+        }
         np++;
         if (y > H * 0.6 && ((x + y) & 7) === 0 && ground.length < 60000) ground.push(wx, wy, wz);
       }
@@ -713,75 +808,153 @@
       pos[3 * k] = AM[0] * x + AM[1] * y + AM[2] * z + AT[0];
       pos[3 * k + 1] = AM[3] * x + AM[4] * y + AM[5] * z + AT[1];
       pos[3 * k + 2] = AM[6] * x + AM[7] * y + AM[8] * z + AT[2];
+      if (nrm) {
+        const a = nrm[3 * k], b = nrm[3 * k + 1], c = nrm[3 * k + 2];
+        nrm[3 * k] = AM[0] * a + AM[1] * b + AM[2] * c; nrm[3 * k + 1] = AM[3] * a + AM[4] * b + AM[5] * c; nrm[3 * k + 2] = AM[6] * a + AM[7] * b + AM[8] * c;
+      }
     }
-    pos = pos.subarray(0, np * 3); col = col.subarray(0, np * 3);
+    pos = pos.subarray(0, np * 3); srgb = srgb.subarray(0, np * 3); zs = zs.subarray(0, np); if (nrm) nrm = nrm.subarray(0, np * 3);
     const path = poses.map(p => {
       const c = mv3(AM, p.C);
       return { p: [c[0] + AT[0], c[1] + AT[1], c[2] + AT[2]], q: matToQuat(mul3(AM, p.M)) };
     });
-    const vox = voxelize(pos, col, np, P);
+    const colorize = makeColorizer(P.palette, P.sceneScale, P.levels);
     const colLin = new Float32Array(np * 3);
-    for (let k = 0; k < np * 3; k++) colLin[k] = SRGB2LIN[col[k]];
-    return { points: { pos, col: colLin, count: np }, voxels: vox, path, align };
+    for (let k = 0; k < np; k++) {
+      const c = colorize(srgb[3 * k], srgb[3 * k + 1], srgb[3 * k + 2], pos[3 * k + 1], zs[k]);
+      colLin[3 * k] = lin(c[0]); colLin[3 * k + 1] = lin(c[1]); colLin[3 * k + 2] = lin(c[2]);
+    }
+    const vox = voxelize(pos, srgb, zs, nrm, np, P, K, colorize);
+    return { points: { pos, col: colLin, count: np }, cells: vox.cells, blocks: vox.blocks, path, align };
   }
 
-  function voxelize(pos, col, np, P) {
-    const inv = 1 / P.voxel, OFF = 65536, M = 131072, MM = M * M;
+  // Cells: averaged points on a grid. Adaptive mode picks a cell size per point from how much ground one
+  // sample covers at that distance (near = small, far = big), quantised to powers of two, so distant
+  // surfaces stay solid instead of breaking into floating cubes.
+  const CELL_BASE = 0.02;
+  function voxelize(pos, srgb, zs, nrm, np, P, K, colorize) {
+    const OFF = 32768, M = 65536, MM = M * M, MMM = MM * M;
     const map = new Map();
     let cnt = 0, cap = 1 << 16;
-    let sums = new Float32Array(cap * 3), hits = new Uint32Array(cap), keys = new Float64Array(cap);
+    let sums = new Float32Array(cap * 4), nsum = nrm ? new Float32Array(cap * 3) : null, hits = new Uint32Array(cap), keys = new Float64Array(cap);
+    const mult = 2 * P.voxel / 0.24, fpk = P.step / K.fx;
     for (let k = 0; k < np; k++) {
+      let L = 0, size = P.voxel;
+      if (P.adaptive) {
+        const want = Math.max(CELL_BASE, zs[k] * fpk * mult);
+        L = Math.max(0, Math.min(9, Math.round(Math.log2(want / CELL_BASE))));
+        size = CELL_BASE * (1 << L);
+      }
+      const inv = 1 / size;
       const ix = Math.floor(pos[3 * k] * inv), iy = Math.floor(pos[3 * k + 1] * inv), iz = Math.floor(pos[3 * k + 2] * inv);
       if (Math.abs(ix) >= OFF || Math.abs(iy) >= OFF || Math.abs(iz) >= OFF) continue;
-      const key = (ix + OFF) * MM + (iy + OFF) * M + (iz + OFF);
+      const key = L * MMM + (ix + OFF) * MM + (iy + OFF) * M + (iz + OFF);
       let idx = map.get(key);
       if (idx === undefined) {
         if (cnt === cap) {
           cap *= 2;
-          const s2 = new Float32Array(cap * 3); s2.set(sums); sums = s2;
+          const s2 = new Float32Array(cap * 4); s2.set(sums); sums = s2;
+          if (nsum) { const n2 = new Float32Array(cap * 3); n2.set(nsum); nsum = n2; }
           const h2 = new Uint32Array(cap); h2.set(hits); hits = h2;
           const k2 = new Float64Array(cap); k2.set(keys); keys = k2;
         }
         idx = cnt++; map.set(key, idx); keys[idx] = key;
       }
-      sums[idx * 3] += col[3 * k]; sums[idx * 3 + 1] += col[3 * k + 1]; sums[idx * 3 + 2] += col[3 * k + 2];
+      sums[idx * 4] += srgb[3 * k]; sums[idx * 4 + 1] += srgb[3 * k + 1]; sums[idx * 4 + 2] += srgb[3 * k + 2]; sums[idx * 4 + 3] += zs[k];
+      if (nsum) { nsum[idx * 3] += nrm[3 * k]; nsum[idx * 3 + 1] += nrm[3 * k + 1]; nsum[idx * 3 + 2] += nrm[3 * k + 2]; }
       hits[idx]++;
     }
-    const keep = new Map(); // key -> voxel index (kept)
+    const keep = new Map();
     for (let i = 0; i < cnt; i++) if (hits[i] >= P.minHits) keep.set(keys[i], i);
-    const L = P.levels > 1 ? P.levels - 1 : 0;
-    // faces: +X -X +Y -Y +Z -Z  (corner offsets CCW from outside)
+    const n = keep.size, center = new Float32Array(n * 3), sizeA = new Float32Array(n), color = new Float32Array(n * 3), normal = nsum ? new Float32Array(n * 3) : null;
+    const decode = key => {
+      const L = Math.floor(key / MMM); let r = key - L * MMM;
+      const ix = Math.floor(r / MM) - OFF; r -= (ix + OFF) * MM;
+      const iy = Math.floor(r / M) - OFF; const iz = r - (iy + OFF) * M - OFF;
+      return [L, ix, iy, iz];
+    };
+    let c = 0;
+    const info = new Array(n);
+    for (const [key, i] of keep) {
+      const [L, ix, iy, iz] = decode(key), size = P.adaptive ? CELL_BASE * (1 << L) : P.voxel;
+      center[3 * c] = (ix + 0.5) * size; center[3 * c + 1] = (iy + 0.5) * size; center[3 * c + 2] = (iz + 0.5) * size; sizeA[c] = size;
+      const h = hits[i], col = colorize(sums[i * 4] / h, sums[i * 4 + 1] / h, sums[i * 4 + 2] / h, center[3 * c + 1], sums[i * 4 + 3] / h);
+      color[3 * c] = lin(col[0]); color[3 * c + 1] = lin(col[1]); color[3 * c + 2] = lin(col[2]);
+      if (normal) { const a = nsum[i * 3], b = nsum[i * 3 + 1], d = nsum[i * 3 + 2], l = Math.hypot(a, b, d) || 1; normal[3 * c] = a / l; normal[3 * c + 1] = b / l; normal[3 * c + 2] = d / l; }
+      info[c] = [key, ix, iy, iz, size];
+      c++;
+    }
+    const cells = { center, size: sizeA, color, normal, count: n };
+    if (!P.blocks) return { cells, blocks: null };
+    // block faces, hiding faces shared with a same-size neighbour
     const FACES = [
-      [[1, 0, 0], M * M, [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]],
-      [[-1, 0, 0], -M * M, [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]],
+      [[1, 0, 0], MM, [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]],
+      [[-1, 0, 0], -MM, [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]],
       [[0, 1, 0], M, [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]]],
       [[0, -1, 0], -M, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]],
       [[0, 0, 1], 1, [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]],
       [[0, 0, -1], -1, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]]]];
     let nFaces = 0;
-    for (const [key] of keep) for (const F of FACES) if (!keep.has(key + F[1])) nFaces++;
+    for (let q = 0; q < n; q++) for (const F of FACES) if (!keep.has(info[q][0] + F[1])) nFaces++;
     const vp = new Float32Array(nFaces * 12), vn = new Float32Array(nFaces * 12), vc = new Float32Array(nFaces * 12), ix = new Uint32Array(nFaces * 6);
     let f = 0;
-    const vs = P.voxel;
-    for (const [key, i] of keep) {
-      const gx = Math.floor(key / MM) - OFF, rem = key - (gx + OFF) * MM, gy = Math.floor(rem / M) - OFF, gz = rem - (gy + OFF) * M - OFF;
-      let r = sums[i * 3] / hits[i], g = sums[i * 3 + 1] / hits[i], b = sums[i * 3 + 2] / hits[i];
-      if (L) { r = Math.round(r / 255 * L) / L * 255; g = Math.round(g / 255 * L) / L * 255; b = Math.round(b / 255 * L) / L * 255; }
-      const lr = SRGB2LIN[Math.round(r)], lg = SRGB2LIN[Math.round(g)], lb = SRGB2LIN[Math.round(b)];
+    for (let q = 0; q < n; q++) {
+      const [key, gx, gy, gz, vs] = info[q];
       for (const F of FACES) {
         if (keep.has(key + F[1])) continue;
-        for (let c = 0; c < 4; c++) {
-          const o = f * 12 + c * 3, cn = F[2][c];
+        for (let k = 0; k < 4; k++) {
+          const o = f * 12 + k * 3, cn = F[2][k];
           vp[o] = (gx + cn[0]) * vs; vp[o + 1] = (gy + cn[1]) * vs; vp[o + 2] = (gz + cn[2]) * vs;
           vn[o] = F[0][0]; vn[o + 1] = F[0][1]; vn[o + 2] = F[0][2];
-          vc[o] = lr; vc[o + 1] = lg; vc[o + 2] = lb;
+          vc[o] = color[3 * q]; vc[o + 1] = color[3 * q + 1]; vc[o + 2] = color[3 * q + 2];
         }
         const b4 = f * 4;
-        ix.set([b4, b4 + 1, b4 + 2, b4, b4 + 2, b4 + 3], f * 6);
+        ix[f * 6] = b4; ix[f * 6 + 1] = b4 + 1; ix[f * 6 + 2] = b4 + 2; ix[f * 6 + 3] = b4; ix[f * 6 + 4] = b4 + 2; ix[f * 6 + 5] = b4 + 3;
         f++;
       }
     }
-    return { position: vp, normal: vn, color: vc, index: ix, count: keep.size, faces: nFaces };
+    return { cells, blocks: { position: vp, normal: vn, color: vc, index: ix, faces: nFaces } };
+  }
+
+  // Depth-map surfaces: each frame's depth grid as a continuous mesh (or its wireframe "joined points").
+  // P: {step, stride, wire, far, eps, edge, useMask, select, palette, levels, sceneScale}
+  function sheetGeometry(frames, W, H, K, align, offset, params) {
+    const P = Object.assign({ step: 3, stride: 1, wire: false, far: 0.06, eps: 0.06, edge: 1.2, sceneScale: 10, palette: 'original', levels: 0 }, params);
+    const colorize = P.colorize || makeColorizer(P.palette, P.sceneScale, P.levels);
+    const AM = align.M, AT = align.T, off = offset || [0, 0, 0], step = P.step, inv16 = 1 / 65535;
+    const gw = Math.floor((W - 1) / step) + 1, gh = Math.floor((H - 1) / step) + 1;
+    const pos = [], col = [], idx = [];
+    const vid = new Int32Array(gw * gh), zg = new Float32Array(gw * gh);
+    let nv = 0;
+    for (let fi = 0; fi < frames.length; fi += P.stride) {
+      const f = frames[fi], pose = poseToThree(f.R, f.t), M = pose.M, Cc = pose.C, mask = P.useMask === false ? null : f.mask, sel = P.select;
+      vid.fill(-1);
+      for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+        const x = gx * step, y = gy * step, i = y * W + x, d = f.dn[i] * inv16;
+        if (d < P.far || (mask && mask[i]) || (sel && !sel[i])) continue;
+        const z = f.s / (d + P.eps), cx = (x - K.cx) / K.fx * z, cy = -(y - K.cy) / K.fy * z, cz = -z;
+        const wx = M[0] * cx + M[1] * cy + M[2] * cz + Cc[0], wy = M[3] * cx + M[4] * cy + M[5] * cz + Cc[1], wz = M[6] * cx + M[7] * cy + M[8] * cz + Cc[2];
+        const ax = AM[0] * wx + AM[1] * wy + AM[2] * wz + AT[0] + off[0], ay = AM[3] * wx + AM[4] * wy + AM[5] * wz + AT[1] + off[1], az = AM[6] * wx + AM[7] * wy + AM[8] * wz + AT[2] + off[2];
+        pos.push(ax, ay, az);
+        const c = colorize(f.rgb[i * 3], f.rgb[i * 3 + 1], f.rgb[i * 3 + 2], ay, z);
+        col.push(lin(c[0]), lin(c[1]), lin(c[2]));
+        const g = gy * gw + gx; vid[g] = nv++; zg[g] = z;
+      }
+      const ok = (a, b) => { const r = zg[a] / zg[b]; return r < P.edge && r > 1 / P.edge; };
+      for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+        const a = gy * gw + gx; if (vid[a] < 0) continue;
+        if (P.wire) {
+          if (gx + 1 < gw && vid[a + 1] >= 0 && ok(a, a + 1)) idx.push(vid[a], vid[a + 1]);
+          if (gy + 1 < gh && vid[a + gw] >= 0 && ok(a, a + gw)) idx.push(vid[a], vid[a + gw]);
+        } else if (gx + 1 < gw && gy + 1 < gh) {
+          const b = a + 1, c = a + gw, d = a + gw + 1;
+          if (vid[b] < 0 || vid[c] < 0 || vid[d] < 0) continue;
+          if (!ok(a, b) || !ok(a, c) || !ok(b, d) || !ok(c, d)) continue;
+          idx.push(vid[a], vid[c], vid[b], vid[b], vid[c], vid[d]);
+        }
+      }
+    }
+    return { pos: Float32Array.from(pos), col: Float32Array.from(col), index: Uint32Array.from(idx), count: nv, wire: P.wire };
   }
 
   // moving-average smoothing of a path (positions + quaternions)
@@ -899,7 +1072,8 @@
 
   // live layer: 3D points of selected pixels of one frame, placed with that frame's pose + shot alignment
   function framePoints(frame, W, H, K, align, offset, select, params) {
-    const P = Object.assign({ step: 2, far: 0.06, eps: 0.06, edge: 1.12 }, params);
+    const P = Object.assign({ step: 2, far: 0.06, eps: 0.06, edge: 1.12, sceneScale: 10 }, params);
+    const colorize = P.colorize || makeColorizer(P.palette, P.sceneScale, P.levels);
     const pose = poseToThree(frame.R, frame.t), M = pose.M, Cc = pose.C, AM = align.M, AT = align.T, inv16 = 1 / 65535;
     const pos = [], col = [];
     for (let y = 0; y < H - P.step; y += P.step) for (let x = 0; x < W - P.step; x += P.step) {
@@ -911,7 +1085,8 @@
       const cx = (x - K.cx) / K.fx * z, cy = -(y - K.cy) / K.fy * z, cz = -z;
       const wx = M[0] * cx + M[1] * cy + M[2] * cz + Cc[0], wy = M[3] * cx + M[4] * cy + M[5] * cz + Cc[1], wz = M[6] * cx + M[7] * cy + M[8] * cz + Cc[2];
       pos.push(AM[0] * wx + AM[1] * wy + AM[2] * wz + AT[0] + offset[0], AM[3] * wx + AM[4] * wy + AM[5] * wz + AT[1] + offset[1], AM[6] * wx + AM[7] * wy + AM[8] * wz + AT[2] + offset[2]);
-      col.push(SRGB2LIN[frame.rgb[i * 3]], SRGB2LIN[frame.rgb[i * 3 + 1]], SRGB2LIN[frame.rgb[i * 3 + 2]]);
+      const cc = colorize(frame.rgb[i * 3], frame.rgb[i * 3 + 1], frame.rgb[i * 3 + 2], pos[pos.length - 2], z);
+      col.push(lin(cc[0]), lin(cc[1]), lin(cc[2]));
     }
     return { pos: Float32Array.from(pos), col: Float32Array.from(col), count: pos.length / 3 };
   }
@@ -920,6 +1095,7 @@
     bilinear, globalShift, rgbToGray, rgbaToRgb, buildPyramid, detectFeatures, trackLK, I3, mul3, mv3, tr3, expSO3,
     refinePose, ransacPnP, countInliers, median, resample, normalizeDisparity, trackStep, eigSym3, fitGroundPlane, makeRng,
     matToQuat, poseToThree, computeAlignment, buildWorld, voxelize, smoothPath, SRGB2LIN,
+    PALETTES, makeColorizer, sheetGeometry,
     colorHist, histDiff, isCut, cameraSpread, isStill, medianBackground, dilate, motionMask, maskFromSegments, orMasks, framePoints
   };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -964,7 +1140,7 @@ for (const [id, fmt] of [['fps', v => v], ['maxf', v => v], ['fov', v => v + '°
 $('file').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
   if (S.url) URL.revokeObjectURL(S.url);
-  S.url = URL.createObjectURL(f); S.fileName = f.name.replace(/\.[^.]+$/, '');
+  S.file = f; S.url = URL.createObjectURL(f); S.fileName = f.name.replace(/\.[^.]+$/, '');
   vid.src = S.url; vid.classList.remove('hidden'); vid.controls = true;
   $('go').disabled = true;
   toast('Loading video…');
@@ -981,13 +1157,14 @@ $('go').onclick = () => run().catch(err => { console.error(err); toast('Failed: 
 function show(which) { for (const id of ['setup', 'proc', 'viewer']) $(id).classList.toggle('hidden', id !== which); }
 
 // ---------- models (free, from Hugging Face, run on-device) ----------
-async function getModels(pref, wantSeg) {
+const DEPTH_MODELS = { small: 'onnx-community/depth-anything-v2-small', base: 'onnx-community/depth-anything-v2-base' };
+async function getModels(pref, wantSeg, dmodel) {
   $('pstat').textContent = 'Loading Transformers.js…';
   const T = S.T || (S.T = await import(TF_URL));
   T.env.allowLocalModels = false;
   S.RawImage = T.RawImage;
-  let gpu = false;
-  if (pref !== 'wasm' && navigator.gpu) { try { gpu = !!(await navigator.gpu.requestAdapter()); } catch { gpu = false; } }
+  let gpu = false, f16 = false;
+  if (pref !== 'wasm' && navigator.gpu) { try { const ad = await navigator.gpu.requestAdapter(); gpu = !!ad; f16 = !!ad?.features?.has('shader-f16'); } catch { gpu = false; } }
   const files = {};
   const progress_callback = label => d => {
     if (d.status === 'progress' && d.total) {
@@ -997,16 +1174,19 @@ async function getModels(pref, wantSeg) {
       $('pbar').style.width = (100 * l / t).toFixed(1) + '%';
     }
   };
-  const load = async (task, model, label) => {
+  const load = async (task, model, label, gpuDtype) => {
     if (gpu) {
-      try { return { p: await T.pipeline(task, model, { device: 'webgpu', dtype: 'fp32', progress_callback: progress_callback(label) }), dev: 'GPU' }; }
+      try { return { p: await T.pipeline(task, model, { device: 'webgpu', dtype: gpuDtype || 'fp32', progress_callback: progress_callback(label) }), dev: 'GPU' }; }
       catch (e) { console.warn('WebGPU failed for', model, e); }
     }
     return { p: await T.pipeline(task, model, { device: 'wasm', dtype: 'q8', progress_callback: progress_callback(label) }), dev: 'CPU' };
   };
-  if (!S.pipe || S.pipePref !== pref) {
-    const r = await load('depth-estimation', DEPTH_MODEL, 'depth model');
-    S.pipe = r.p; S.device = r.dev; S.pipePref = pref;
+  const key = pref + '|' + dmodel;
+  if (!S.pipe || S.pipeKey !== key) {
+    S.pipe = null;
+    const big = dmodel === 'base';
+    const r = await load('depth-estimation', DEPTH_MODELS[dmodel] || DEPTH_MODELS.small, big ? 'high-detail depth model' : 'depth model', big ? (f16 ? 'fp16' : 'q8') : 'fp32');
+    S.pipe = r.p; S.device = r.dev; S.pipeKey = key;
     if (gpu && r.dev === 'CPU') toast('GPU not usable, so using CPU instead (slower)', 'warn');
   }
   if (wantSeg && (!S.segPipe || S.segPref !== pref)) {
@@ -1057,7 +1237,7 @@ async function run() {
   const f = (Math.max(W, H) / 2) / Math.tan(fov * Math.PI / 360);
   const K = { fx: f, fy: f, cx: W / 2, cy: H / 2 };
 
-  await getModels($('dq').value, wantSeg);
+  await getModels($('dq').value, wantSeg, $('dmodel').value);
   const segPipe = wantSeg ? S.segPipe : null;
 
   const wc = document.createElement('canvas'); wc.width = W; wc.height = H;
@@ -1109,7 +1289,7 @@ async function run() {
       R = r.R; t = r.t; s = r.s;
       info = `${r.nTracks} tracked points · ${r.nIn} agree${r.ok ? '' : ' · ⚠ lost track, guessing motion'}`;
     }
-    frames.push({ time: times[i], rgb, dn: Uint16Array.from(dn, v => Math.round(v * 65535)), s, R, t, seg: shot, mask });
+    frames.push({ time: times[i], rgb, dn: Uint16Array.from(dn, v => Math.round(v * 65535)), s, R, t, seg: shot, mask, ok: !r || r.ok });
     prev = { pyr, dn, s, R, t, mask }; prevHist = hist;
 
     // preview
@@ -1141,26 +1321,41 @@ async function run() {
   frames.forEach((fr, i) => { if (!segs.length || segs[segs.length - 1].id !== fr.seg) segs.push({ id: fr.seg, start: i, end: i + 1 }); else segs[segs.length - 1].end = i + 1; });
   let moving = 0, movingFails = 0;
   for (const sg of segs) {
-    const list = frames.slice(sg.start, sg.end);
-    sg.still = C.isStill(list, SCENE_SCALE);
-    if (sg.still) {
-      for (const fr of list) { fr.R = I3(); fr.t = [0, 0, 0]; } // tripod: lock the camera, drop the jitter
-      sg.bg = C.medianBackground(list, W, H, 41);
-    } else moving += list.length;
+    const list = frames.slice(sg.start, sg.end), lost = list.slice(1).filter(f => !f.ok).length;
+    // a shot we can't track (dancing, animation, screen recording, chaos…) becomes a 3D video "stage".
+    // Check this first: lost frames fall back to "no motion", which would otherwise look like a tripod.
+    sg.stage = list.length < 3 || lost > 0.5 * (list.length - 1);
+    sg.still = !sg.stage && C.isStill(list, SCENE_SCALE);
+    if (sg.still || sg.stage) for (const fr of list) { fr.R = I3(); fr.t = [0, 0, 0]; } // lock the camera
+    if (sg.still) sg.bg = C.medianBackground(list, W, H, 41);
+    if (!sg.still && !sg.stage) { moving += list.length; movingFails += lost; }
     sg.align = null; sg.offset = [0, 0, 0]; sg.live = new Map();
   }
-  if (moving && fails > moving * 0.3) toast(`Tracking was lost on ${fails} frames, so the path may wobble. Try a slower walk or a different FOV.`, 'warn', 7000);
+  if (moving && movingFails > moving * 0.25) toast(`Tracking was lost on ${movingFails} frames, so the path may wobble. Try a slower walk or a different FOV.`, 'warn', 7000);
 
-  Object.assign(S, { frames, segs, W, H, K, fps, t0: times[0], vfov: 2 * Math.atan((H / 2) / K.fy) * 180 / Math.PI, sky, hasMasks: frames.some(f => f.mask) });
+  Object.assign(S, { aspect: vw / vh, frames, segs, W, H, K, fps, t0: times[0], vfov: 2 * Math.atan((H / 2) / K.fy) * 180 / Math.PI, sky, hasMasks: frames.some(f => f.mask) });
   enterViewer();
-  const still = segs.filter(s => s.still).length;
-  if (segs.length > 1 || still) toast(`Found ${segs.length} shot${segs.length > 1 ? 's' : ''}${still ? ` (${still} still-camera → diorama)` : ''}. Tap the shot buttons to jump.`, '', 6000);
+  const still = segs.filter(s => s.still).length, stage = segs.filter(s => s.stage).length;
+  if (segs.length > 1 || still || stage) toast(`Found ${segs.length} shot${segs.length > 1 ? 's' : ''}${still ? ` · ${still} still → diorama` : ''}${stage ? ` · ${stage} untrackable → 3D video stage` : ''}.${segs.length > 1 ? ' Tap the shot buttons to jump.' : ''}`, '', 6500);
 }
 
 // ---------- viewer ----------
-let renderer, scene, camera, controls, grid, pathGroup, marker, world, live, clock = performance.now();
-let mode = 'ride', style = 'voxels', playing = false, idx = 0, recording = null, lastSeg = -1, liveKey = '';
+const MUX_URL = 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/+esm';
+let renderer, scene, camera, controls, grid, pathGroup, marker, world, liveP, liveM, clock = performance.now();
+let mode = 'ride', style = 'blocks', playing = false, idx = 0, recording = null, exporting = null, lastSeg = -1, liveKey = '', snapChase = true;
 const chaseLook = new THREE.Vector3();
+const STYLE_LABEL = { blocks: 'Blocks', tiles: 'Tiles', spheres: 'Spheres', points: 'Points', wire: 'Wire', sheets: 'Sheets', video3d: '3D Video' };
+const STYLE_TIP = {
+  blocks: 'Blocks: cubes, smaller near the camera and bigger far away',
+  tiles: 'Tiles: flat squares turned to follow each surface',
+  spheres: 'Spheres: low-poly gems',
+  points: 'Points: the raw 3D samples',
+  wire: 'Wire: joined points, a wireframe of the depth',
+  sheets: 'Sheets: continuous surfaces from key frames',
+  video3d: '3D Video: every frame as a moving 3D surface',
+};
+
+for (const [k, v] of Object.entries(C.PALETTES)) { const o = document.createElement('option'); o.value = k; o.textContent = v.name; $('palSel').appendChild(o); }
 
 function initThree() {
   if (renderer) return;
@@ -1180,13 +1375,16 @@ function initThree() {
   cone.rotation.x = -Math.PI / 2; cone.position.z = -0.4; marker.add(cone);
   marker.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffb347 })));
   scene.add(marker);
-  live = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 0.12, vertexColors: true, sizeAttenuation: true }));
-  live.name = 'retrace-live'; scene.add(live); S.live = live;
+  liveP = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 0.12, vertexColors: true, sizeAttenuation: true }));
+  liveM = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  liveP.name = 'retrace-live-points'; liveM.name = 'retrace-live-surface';
+  scene.add(liveP, liveM); S.live = liveP; S.liveM = liveM;
   addEventListener('resize', resize); resize();
   renderer.setAnimationLoop(tick);
 }
 function resize() {
-  if (!renderer) return;
+  if (!renderer || exporting) return;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
 }
 
@@ -1196,11 +1394,12 @@ function enterViewer() {
   vid.muted = true; $('bSound').textContent = '🔇';
   $('scrub').max = S.frames.length - 1; idx = 0; $('scrub').value = 0; lastSeg = -1;
   $('useMask').disabled = !S.hasMasks;
+  if (S.segs.every(s => s.stage)) setStyleUI('video3d'); // nothing trackable: lead with the moving 3D surface
   buildShotChips();
   buildScene();
   setMode('ride');
   seekVideo();
-  toast('Done! Press ▶ to retrace the video. Use Orbit to look around.', '', 4500);
+  toast('Done! Press ▶ to retrace the video. Try the styles under the controls.', '', 4500);
 }
 
 function buildShotChips() {
@@ -1208,16 +1407,23 @@ function buildShotChips() {
   box.classList.toggle('hidden', S.segs.length < 2);
   S.segs.forEach((sg, k) => {
     const b = document.createElement('button');
-    b.textContent = `Shot ${k + 1}${sg.still ? ' ◉' : ''}`; b.title = sg.still ? 'Still camera: diorama' : 'Moving camera';
-    b.onclick = () => { idx = sg.start; $('scrub').value = idx; seekVideo(); if (playing) vid.play().catch(() => { }); toast(`Shot ${k + 1}${sg.still ? ': diorama (still camera)' : ''}`); };
+    const tag = sg.still ? ' ◉' : sg.stage ? ' ◎' : '';
+    b.textContent = `Shot ${k + 1}${tag}`; b.title = sg.still ? 'Still camera: diorama' : sg.stage ? 'Untrackable: 3D video stage' : 'Moving camera';
+    b.onclick = () => { idx = sg.start; $('scrub').value = idx; seekVideo(); if (playing) vid.play().catch(() => { }); toast(`Shot ${k + 1}${sg.still ? ': diorama (still camera)' : sg.stage ? ': 3D video stage' : ''}`); };
     box.appendChild(b);
   });
 }
 
 function readParams() {
-  const p = { voxel: +$('vox').value, far: +$('far').value, minHits: +$('hits').value, levels: +$('pal').value, stride: +$('str').value, eps: EPS, sceneScale: SCENE_SCALE, useMask: $('useMask').checked };
-  $('voxV').textContent = p.voxel.toFixed(2); $('farV').textContent = p.far.toFixed(2); $('hitsV').textContent = p.minHits;
-  $('palV').textContent = p.levels ? p.levels + ' levels' : 'off'; $('strV').textContent = p.stride; $('smV').textContent = $('sm').value;
+  const p = {
+    voxel: +$('vox').value, far: +$('far').value, minHits: +$('hits').value, levels: +$('pal').value, stride: +$('str').value,
+    eps: EPS, sceneScale: SCENE_SCALE, useMask: $('useMask').checked, palette: $('palSel').value, adaptive: $('adaptive').checked
+  };
+  $('voxV').textContent = p.adaptive ? '×' + (p.voxel / 0.24).toFixed(2) : p.voxel.toFixed(2);
+  $('farV').textContent = p.far.toFixed(2); $('hitsV').textContent = p.minHits;
+  $('palV').textContent = p.palette !== 'original' ? 'n/a' : p.levels ? p.levels + ' levels' : 'off';
+  $('pal').disabled = p.palette !== 'original';
+  $('strV').textContent = p.stride; $('smV').textContent = $('sm').value;
   return p;
 }
 
@@ -1230,59 +1436,93 @@ function xRange(pos, fallback) { // robust x extent of a point set
   xs.sort((a, b) => a - b);
   return [xs[Math.floor(xs.length * 0.02)], xs[Math.floor(xs.length * 0.98)]];
 }
+const shiftX = (arr, ox) => { if (arr && ox) for (let i = 0; i < arr.length; i += 3) arr[i] += ox; };
+const litMat = (opts = {}) => $('lit').checked ? new THREE.MeshLambertMaterial(opts) : new THREE.MeshBasicMaterial(opts);
+
+function instanced(cells, geo, mat, scaleK, orient) {
+  const n = cells.count, im = new THREE.InstancedMesh(geo, mat, Math.max(1, n));
+  im.count = n;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pp = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(), zAxis = new THREE.Vector3(0, 0, 1), nv = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    pp.set(cells.center[3 * i], cells.center[3 * i + 1], cells.center[3 * i + 2]);
+    const s = cells.size[i] * scaleK;
+    if (orient && cells.normal) { nv.set(cells.normal[3 * i], cells.normal[3 * i + 1], cells.normal[3 * i + 2]); q.setFromUnitVectors(zAxis, nv); sc.set(s, s, 1); }
+    else { q.set(0, 0, 0, 1); sc.set(s, s, s); }
+    im.setMatrixAt(i, m.compose(pp, q, sc));
+    im.setColorAt(i, col.setRGB(cells.color[3 * i], cells.color[3 * i + 1], cells.color[3 * i + 2]));
+  }
+  im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  return im;
+}
+function sheetObject(g) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(g.pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(g.col, 3));
+  geo.setIndex(new THREE.BufferAttribute(g.index, 1));
+  return g.wire ? new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true }))
+    : new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+}
 
 function buildScene() {
   const t0 = performance.now();
   const p = readParams();
+  S.colorize = C.makeColorizer(p.palette, SCENE_SCALE, p.levels);
   if (world) { scene.remove(world); disposeTree(world); }
-  world = new THREE.Group(); world.name = 'retrace-street';
-  let cursorX = 0, blocks = 0, pts = 0, planeMissing = 0;
+  world = new THREE.Group(); world.name = 'retrace-' + style;
+  let cursorX = 0, pieces = 0, planeMissing = 0;
   S.segs.forEach((sg, k) => {
-    const list = sg.still ? [sg.bg] : S.frames.slice(sg.start, sg.end);
-    const w = C.buildWorld(list, S.W, S.H, S.K, p, sg.align);
+    const list = sg.still ? [sg.bg] : sg.stage ? [S.frames[sg.start]] : S.frames.slice(sg.start, sg.end);
+    const w = C.buildWorld(list, S.W, S.H, S.K, { ...p, normals: style === 'tiles', blocks: style === 'blocks' }, sg.align);
     sg.align = w.align;
-    if (!w.align.planeFound) planeMissing++;
+    if (!w.align.planeFound && !sg.stage) planeMissing++;
     // lay shots out side by side along +X so they never overlap
     const pathX = w.path.map(q => q.p[0]);
     const [lo, hi] = xRange(w.points.pos, [Math.min(...pathX) - 2, Math.max(...pathX) + 2]);
     const ox = k === 0 ? 0 : cursorX - Math.min(lo, ...pathX);
     cursorX = ox + Math.max(hi, ...pathX) + SHOT_GAP;
     sg.offset = [ox, 0, 0];
-    if (ox) {
-      for (let i = 0; i < w.voxels.position.length; i += 3) w.voxels.position[i] += ox;
-      for (let i = 0; i < w.points.pos.length; i += 3) w.points.pos[i] += ox;
-    }
-    const raw = sg.still ? Array.from({ length: sg.end - sg.start }, () => w.path[0]) : w.path;
+    shiftX(w.points.pos, ox); shiftX(w.cells.center, ox); shiftX(w.blocks?.position, ox);
+    const raw = (sg.still || sg.stage) ? Array.from({ length: sg.end - sg.start }, () => w.path[0]) : w.path;
     sg.rawPath = raw.map(q => ({ p: [q.p[0] + ox, q.p[1], q.p[2]], q: q.q }));
-    const g = new THREE.BufferGeometry();
-    let obj;
-    if (style === 'voxels') {
-      g.setAttribute('position', new THREE.BufferAttribute(w.voxels.position, 3));
-      g.setAttribute('normal', new THREE.BufferAttribute(w.voxels.normal, 3));
-      g.setAttribute('color', new THREE.BufferAttribute(w.voxels.color, 3));
-      g.setIndex(new THREE.BufferAttribute(w.voxels.index, 1));
-      obj = new THREE.Mesh(g, $('lit').checked ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshBasicMaterial({ vertexColors: true }));
-    } else {
+    sg.live.clear();
+    let obj = null;
+    if (sg.stage || style === 'video3d') obj = null; // the live surface is the whole show
+    else if (style === 'blocks') {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(w.blocks.position, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(w.blocks.normal, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(w.blocks.color, 3));
+      g.setIndex(new THREE.BufferAttribute(w.blocks.index, 1));
+      obj = new THREE.Mesh(g, litMat({ vertexColors: true })); pieces += w.cells.count;
+    } else if (style === 'tiles') {
+      obj = instanced(w.cells, new THREE.PlaneGeometry(1, 1), litMat({ side: THREE.DoubleSide }), 1.3, true); pieces += w.cells.count;
+    } else if (style === 'spheres') {
+      obj = instanced(w.cells, new THREE.IcosahedronGeometry(0.5, 0), $('lit').checked ? new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.75 }) : new THREE.MeshBasicMaterial(), 1.15, false); pieces += w.cells.count;
+    } else if (style === 'points') {
+      const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(w.points.pos, 3));
       g.setAttribute('color', new THREE.BufferAttribute(w.points.col, 3));
-      obj = new THREE.Points(g, new THREE.PointsMaterial({ size: Math.max(0.03, p.voxel * 0.6), vertexColors: true, sizeAttenuation: true }));
+      obj = new THREE.Points(g, new THREE.PointsMaterial({ size: Math.max(0.03, p.voxel * 0.5), vertexColors: true, sizeAttenuation: true })); pieces += w.points.count;
+    } else { // wire / sheets: depth surfaces from key frames
+      const wire = style === 'wire';
+      const g = C.sheetGeometry(list, S.W, S.H, S.K, sg.align, sg.offset, { step: wire ? 4 : 3, stride: Math.max(1, p.stride * (wire ? 2 : 3)), wire, far: p.far, eps: EPS, useMask: p.useMask, colorize: S.colorize });
+      obj = sheetObject(g); pieces += g.index.length / (wire ? 2 : 3);
     }
-    obj.name = `shot-${k + 1}${sg.still ? '-diorama' : ''}`;
-    world.add(obj);
-    blocks += w.voxels.count; pts += w.points.count;
-    sg.live.clear();
+    if (obj) { obj.name = `shot-${k + 1}${sg.still ? '-diorama' : ''}`; world.add(obj); }
   });
   scene.add(world); S.world = world;
   if (planeMissing && !S.warnedPlane) { S.warnedPlane = true; toast(`Couldn't find a clear ground plane in ${planeMissing} shot(s), so the level may be off.`, 'warn', 5000); }
   applySmoothing();
-  const skyC = new THREE.Color().setRGB(...S.sky.map(v => v / 255), THREE.SRGBColorSpace);
+  const sky = S.colorize.sky(...S.sky);
+  const skyC = new THREE.Color().setRGB(...sky.map(v => v / 255), THREE.SRGBColorSpace);
   scene.background = skyC;
   scene.fog = $('fogOn').checked ? new THREE.Fog(skyC, SCENE_SCALE * 1.5, SCENE_SCALE * 7) : null;
   grid.visible = $('showGrid').checked && mode !== 'ride';
-  live.material.size = Math.max(0.03, p.voxel * 0.45);
+  liveP.material.size = Math.max(0.03, p.voxel * 0.45);
   liveKey = '';
-  const still = S.segs.filter(s => s.still).length;
-  $('stats').textContent = `${S.frames.length} frames · ${S.segs.length} shot${S.segs.length > 1 ? 's' : ''}${still ? ` (${still} diorama)` : ''} · ${blocks.toLocaleString()} blocks · ${pts.toLocaleString()} points${S.hasMasks ? ' · people/vehicles detected' : ''} · built in ${Math.round(performance.now() - t0)} ms`;
+  const still = S.segs.filter(s => s.still).length, stage = S.segs.filter(s => s.stage).length;
+  const unit = { blocks: 'blocks', tiles: 'tiles', spheres: 'spheres', points: 'points', wire: 'lines', sheets: 'triangles', video3d: '' }[style];
+  $('stats').textContent = `${S.frames.length} frames · ${S.segs.length} shot${S.segs.length > 1 ? 's' : ''}${still ? ` (${still} diorama)` : ''}${stage ? ` (${stage} 3D video stage)` : ''}${unit ? ` · ${Math.round(pieces).toLocaleString()} ${unit}` : ''}${S.hasMasks ? ' · people/vehicles detected' : ''} · built in ${Math.round(performance.now() - t0)} ms`;
 }
 
 function applySmoothing() {
@@ -1290,18 +1530,22 @@ function applySmoothing() {
   S.path = [];
   pathGroup.children.slice().forEach(c => { pathGroup.remove(c); c.geometry.dispose(); });
   for (const sg of S.segs) {
-    const seg = (sg.still ? sg.rawPath : C.smoothPath(sg.rawPath, sm)).map(x => ({ p: new THREE.Vector3(...x.p), q: new THREE.Quaternion(...x.q) }));
+    const fixed = sg.still || sg.stage;
+    const seg = (fixed ? sg.rawPath : C.smoothPath(sg.rawPath, sm)).map(x => ({ p: new THREE.Vector3(...x.p), q: new THREE.Quaternion(...x.q) }));
     S.path.push(...seg);
-    sg.center = seg.reduce((a, x) => a.add(x.p), new THREE.Vector3()).multiplyScalar(1 / seg.length);
-    if (!sg.still) pathGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(seg.map(x => x.p)), new THREE.LineBasicMaterial({ color: 0xffb347 })));
+    if (!fixed) pathGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(seg.map(x => x.p)), new THREE.LineBasicMaterial({ color: 0xffb347 })));
   }
   pathGroup.visible = $('showPath').checked && mode !== 'ride';
 }
 
 let rebuildT;
-for (const id of ['vox', 'far', 'hits', 'pal', 'str']) $(id).oninput = () => { readParams(); clearTimeout(rebuildT); rebuildT = setTimeout(() => { buildScene(); toast('Rebuilt'); }, 300); };
+const rebuildSoon = (msg = 'Rebuilt') => { readParams(); clearTimeout(rebuildT); rebuildT = setTimeout(() => { buildScene(); toast(msg); }, 300); };
+for (const id of ['vox', 'far', 'hits', 'pal', 'str']) $(id).oninput = () => rebuildSoon();
+$('palSel').onchange = () => rebuildSoon('Palette: ' + C.PALETTES[$('palSel').value].name);
+$('adaptive').onchange = () => rebuildSoon($('adaptive').checked ? 'Pieces sized by distance' : 'All pieces the same size');
 $('sm').oninput = () => { readParams(); applySmoothing(); };
-$('lit').onchange = buildScene; $('fogOn').onchange = buildScene; $('useMask').onchange = () => { buildScene(); toast($('useMask').checked ? 'People/vehicles cut out of the blocks' : 'People/vehicles kept in the blocks'); };
+$('lit').onchange = () => buildScene(); $('fogOn').onchange = () => buildScene();
+$('useMask').onchange = () => { buildScene(); toast($('useMask').checked ? 'People/vehicles cut out of the model' : 'People/vehicles kept in the model'); };
 $('showPath').onchange = () => pathGroup.visible = $('showPath').checked && mode !== 'ride';
 $('showGrid').onchange = () => grid.visible = $('showGrid').checked && mode !== 'ride';
 $('liveOn').onchange = () => { liveKey = ''; toast($('liveOn').checked ? 'Live layer on' : 'Live layer off'); };
@@ -1313,7 +1557,7 @@ const segIndex = id => S.segs.findIndex(s => s.id === id);
 function frameCenter(k) { // what orbit / chase should frame for shot k
   const sg = S.segs[k], box = new THREE.Box3().setFromPoints(S.path.slice(sg.start, sg.end).map(x => x.p));
   const c = box.getCenter(new THREE.Vector3());
-  if (sg.still) { const q = S.path[sg.start]; c.copy(q.p).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(q.q), SCENE_SCALE * 0.8); }
+  if (sg.still || sg.stage) { const q = S.path[sg.start]; c.copy(q.p).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(q.q), SCENE_SCALE * 0.8); }
   return { c, size: Math.max(box.getSize(new THREE.Vector3()).length(), SCENE_SCALE) };
 }
 
@@ -1333,12 +1577,11 @@ function setMode(m) {
   }
   if (m === 'chase') snapChase = true;
 }
-let snapChase = true;
 $('modeSeg').onclick = e => { const m = e.target.dataset?.m; if (m) setMode(m); };
+function setStyleUI(s) { style = s; for (const b of $('styleSeg').children) b.classList.toggle('on', b.dataset.s === s); }
 $('styleSeg').onclick = e => {
-  const s = e.target.dataset?.s; if (!s || s === style) return;
-  style = s; for (const b of $('styleSeg').children) b.classList.toggle('on', b.dataset.s === s);
-  buildScene();
+  const s = e.target.closest('button')?.dataset?.s; if (!s || s === style) return;
+  setStyleUI(s); buildScene(); toast(STYLE_TIP[s]);
 };
 
 function poseAt(x) {
@@ -1348,26 +1591,39 @@ function poseAt(x) {
   return { p: new THREE.Vector3().lerpVectors(S.path[i0].p, S.path[i1].p, a), q: new THREE.Quaternion().slerpQuaternions(S.path[i0].q, S.path[i1].q, a) };
 }
 
-// live layer: people/vehicles (and, in dioramas, anything that moves) from the current frame, in 3D
+// live layer. Full mode (3D Video style, or untrackable stage shots): the whole frame as a moving surface.
+// Otherwise: people/vehicles (and, in dioramas, anything that moves) as 3D points.
+function setGeo(obj, g) {
+  obj.geometry.dispose();
+  const geo = new THREE.BufferGeometry();
+  if (g && g.count) {
+    geo.setAttribute('position', new THREE.BufferAttribute(g.pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(g.col, 3));
+    if (g.index) geo.setIndex(new THREE.BufferAttribute(g.index, 1));
+  }
+  obj.geometry = geo; obj.visible = !!(g && g.count);
+}
 function updateLive(fi) {
-  const on = $('liveOn').checked, fr = S.frames[fi], k = segIndex(fr.seg), sg = S.segs[k];
-  const key = on ? `${fi}|${style}` : 'off';
-  if (key === liveKey) return;
+  const fr = S.frames[fi], k = segIndex(fr.seg), sg = S.segs[k], full = style === 'video3d' || sg.stage, on = $('liveOn').checked;
+  const key = `${fi}|${style}|${full ? 'full' : on ? 'people' : 'off'}|${$('palSel').value}|${$('pal').value}|${$('far').value}`;
+  if (key === liveKey || !sg.align) return;
   liveKey = key;
+  if (full) {
+    setGeo(liveM, C.sheetGeometry([fr], S.W, S.H, S.K, sg.align, sg.offset, { step: 2, far: +$('far').value, eps: EPS, useMask: false, colorize: S.colorize }));
+    setGeo(liveP, null);
+    return;
+  }
+  setGeo(liveM, null);
   let pts = null;
-  if (on && sg.align) {
+  if (on) {
     let sel = sg.live.get(fi);
     if (sel === undefined) {
       sel = sg.still ? C.orMasks(C.motionMask(fr, sg.bg, S.W, S.H), fr.mask) : fr.mask;
       if (sg.live.size > 400) sg.live.clear();
       sg.live.set(fi, sel);
     }
-    if (sel) pts = C.framePoints(fr, S.W, S.H, S.K, sg.align, sg.offset, sel, { far: +$('far').value, eps: EPS });
+    if (sel) pts = C.framePoints(fr, S.W, S.H, S.K, sg.align, sg.offset, sel, { far: +$('far').value, eps: EPS, colorize: S.colorize });
   }
-  live.geometry.dispose();
-  const g = new THREE.BufferGeometry();
-  if (pts && pts.count) { g.setAttribute('position', new THREE.BufferAttribute(pts.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(pts.col, 3)); }
-  live.geometry = g; live.visible = !!(pts && pts.count);
+  setGeo(liveP, pts);
 }
 
 // playback: the original video is the clock, so 3D and video stay in sync
@@ -1380,23 +1636,14 @@ function setPlaying(p) {
     vid.play().catch(() => { /* fall back to internal clock */ });
   } else vid.pause();
 }
-$('play').onclick = () => setPlaying(!playing);
+$('play').onclick = () => { if (!exporting) setPlaying(!playing); };
 $('scrub').oninput = () => { if (playing) setPlaying(false); idx = +$('scrub').value; seekVideo(); };
 
-function tick() {
-  const now = performance.now(), dt = Math.min(0.1, (now - clock) / 1000); clock = now;
+// draw one moment. x = frame index (fractional), tsec = clock for the sway, dt = step for chase smoothing
+function renderAt(x, tsec, dt) {
   const N = S.frames.length;
-  if (playing) {
-    if (!vid.paused && vid.readyState >= 2) idx = (vid.currentTime - S.t0) * S.fps;
-    else idx += dt * S.fps;
-    if (idx >= N - 1) {
-      if (recording) { idx = N - 1; stopRecording(); setPlaying(false); }
-      else { idx = 0; seekVideo(); }
-    }
-    $('scrub').value = idx;
-  }
-  $('tlabel').textContent = (idx / S.fps).toFixed(1) + ' s';
-  const fi = Math.max(0, Math.min(N - 1, Math.round(idx))), segId = S.frames[fi].seg, k = segIndex(segId), sg = S.segs[k];
+  idx = Math.max(0, Math.min(N - 1, x));
+  const fi = Math.round(idx), segId = S.frames[fi].seg, k = segIndex(segId), sg = S.segs[k];
   const pose = poseAt(idx);
   if (segId !== lastSeg) { // entering a new shot
     if (lastSeg !== -1 && mode === 'orbit') {
@@ -1412,10 +1659,10 @@ function tick() {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(pose.q);
   if (mode === 'ride') {
     camera.position.copy(pose.p); camera.quaternion.copy(pose.q);
-    if (sg.still && $('sway').checked) { // gentle parallax so a tripod shot reads as 3D
-      const tt = now / 1000, right = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.q);
+    if ((sg.still || sg.stage) && $('sway').checked) { // gentle parallax so a locked shot reads as 3D
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.q);
       const pivot = pose.p.clone().addScaledVector(fwd, SCENE_SCALE * 0.8);
-      camera.position.addScaledVector(right, Math.sin(tt * 0.7) * SCENE_SCALE * 0.08).add(new THREE.Vector3(0, Math.sin(tt * 0.45) * SCENE_SCALE * 0.03, 0));
+      camera.position.addScaledVector(right, Math.sin(tsec * 0.7) * SCENE_SCALE * 0.08).add(new THREE.Vector3(0, Math.sin(tsec * 0.45) * SCENE_SCALE * 0.03, 0));
       camera.lookAt(pivot);
     }
   } else if (mode === 'chase') {
@@ -1430,13 +1677,31 @@ function tick() {
   renderer.render(scene, camera);
 }
 
+function tick() {
+  if (exporting) return; // the exporter drives rendering itself
+  const now = performance.now(), dt = Math.min(0.1, (now - clock) / 1000); clock = now;
+  const N = S.frames.length;
+  let x = idx;
+  if (playing) {
+    if (!vid.paused && vid.readyState >= 2) x = (vid.currentTime - S.t0) * S.fps;
+    else x += dt * S.fps;
+    if (x >= N - 1) {
+      if (recording) { x = N - 1; stopRecording(); setPlaying(false); }
+      else { x = 0; idx = 0; seekVideo(); }
+    }
+    $('scrub').value = x;
+  }
+  $('tlabel').textContent = (x / S.fps).toFixed(1) + ' s';
+  renderAt(x, now / 1000, dt);
+}
+
 // ---------- top bar ----------
 $('bInset').onclick = () => { const on = $('inset').classList.toggle('hidden'); $('bInset').classList.toggle('on', !on); };
 $('bSound').onclick = () => { vid.muted = !vid.muted; $('bSound').textContent = vid.muted ? '🔇' : '🔊'; toast(vid.muted ? 'Sound off' : 'Sound on'); };
 $('bSet').onclick = () => { readParams(); $('sheet').classList.toggle('hidden'); };
 $('bClose').onclick = () => $('sheet').classList.add('hidden');
 $('bNew').onclick = () => {
-  if (recording) { toast('Stop the recording first', 'warn'); return; }
+  if (recording || exporting) { toast('Finish or cancel the video export first', 'warn'); return; }
   setPlaying(false);
   $('vidHome').appendChild(vid); vid.controls = true;
   show('setup'); toast('Pick a new video, or change settings and rebuild');
@@ -1450,15 +1715,16 @@ function download(blob, name) {
 const baseName = () => 'retrace-' + (S.fileName || 'street').replace(/[^\w-]+/g, '_').slice(0, 40);
 
 $('bGlb').onclick = () => {
+  if (style === 'video3d' || !world.children.length) { toast('3D Video has no fixed model. Pick another style to export a .glb', 'warn', 5000); return; }
   toast('Exporting 3D model…');
-  new GLTFExporter().parse(world, res => { download(new Blob([res], { type: 'model/gltf-binary' }), baseName() + '.glb'); toast(`Saved .glb with ${S.segs.length} shot${S.segs.length > 1 ? 's' : ''} (open in Blender or any 3D viewer)`); },
+  new GLTFExporter().parse(world, res => { download(new Blob([res], { type: 'model/gltf-binary' }), `${baseName()}-${style}.glb`); toast(`Saved .glb (${STYLE_LABEL[style]}, ${world.children.length} shot${world.children.length > 1 ? 's' : ''})`); },
     err => toast('GLB export failed: ' + err.message, 'err', 6000), { binary: true });
 };
 $('bPath').onclick = () => {
   const data = {
     app: 'Retrace', units: 'scene units (arbitrary scale; ground at y=0)', coords: 'three.js / glTF: Y up, camera looks down -Z',
     fps: S.fps, videoStart: S.t0, verticalFovDeg: +S.vfov.toFixed(3),
-    shots: S.segs.map((s, k) => ({ shot: k + 1, firstFrame: s.start, lastFrame: s.end - 1, stillCamera: s.still, offset: s.offset })),
+    shots: S.segs.map((s, k) => ({ shot: k + 1, firstFrame: s.start, lastFrame: s.end - 1, stillCamera: s.still, stage: s.stage, offset: s.offset })),
     frames: S.path.map((x, i) => ({ i, shot: segIndex(S.frames[i].seg) + 1, t: +(S.t0 + i / S.fps).toFixed(4), position: x.p.toArray().map(v => +v.toFixed(5)), quaternion: x.q.toArray().map(v => +v.toFixed(6)) }))
   };
   download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), baseName() + '-path.json');
@@ -1467,23 +1733,126 @@ $('bPath').onclick = () => {
 
 $('bRec').onclick = () => {
   if (recording) { stopRecording(); setPlaying(false); return; }
+  if (exporting) return;
+  $('sheet').classList.add('hidden');
+  if ($('recFmt').value === 'mp4') renderMp4().catch(e => { console.error(e); endExport(); toast('MP4 export failed: ' + e.message, 'err', 7000); });
+  else recordWebm();
+};
+$('busyCancel').onclick = () => { if (exporting) { exporting.cancel = true; $('busyT').textContent = 'Cancelling…'; } };
+
+// live screen capture (real time, whatever the screen shows)
+function recordWebm(note) {
   if (!window.MediaRecorder || !renderer.domElement.captureStream) { toast("This browser can't record the canvas", 'err'); return; }
   const stream = renderer.domElement.captureStream(30);
   if (!vid.muted) { try { vid.captureStream?.().getAudioTracks().forEach(t => stream.addTrack(t)); } catch { } }
-  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
   const chunks = [];
   const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8e6 } : undefined);
   rec.ondataavailable = e => e.data.size && chunks.push(e.data);
-  rec.onstop = () => { download(new Blob(chunks, { type: 'video/webm' }), baseName() + `-${mode}.webm`); toast('Saved fly-through video'); };
+  rec.onstop = () => { download(new Blob(chunks, { type: mime || 'video/webm' }), `${baseName()}-${mode}-${style}.${ext}`); toast(`Saved fly-through (.${ext})`); };
   recording = rec; rec.start(250);
-  $('recdot').classList.remove('hidden'); $('bRec').textContent = '■ Stop recording'; $('sheet').classList.add('hidden');
+  $('recdot').classList.remove('hidden'); $('bRec').textContent = '■ Stop recording';
   idx = 0; setPlaying(true);
-  toast(`Recording one pass in ${mode} view…`);
-};
+  toast(note || `Recording one pass in ${mode} view…`, note ? 'warn' : '', note ? 5000 : 3200);
+}
 function stopRecording() {
   if (!recording) return;
   try { recording.stop(); } catch { }
-  recording = null; $('recdot').classList.add('hidden'); $('bRec').textContent = '● Record fly-through (.webm)';
+  recording = null; $('recdot').classList.add('hidden'); $('bRec').textContent = '● Render fly-through video';
+}
+
+// original audio for the clip range, ready for an AudioEncoder
+async function prepareAudio(dur) {
+  if (!S.file || !window.AudioEncoder || !window.OfflineAudioContext) return { why: 'audio encoding not supported here' };
+  let ab;
+  try { ab = await new OfflineAudioContext(1, 1, 48000).decodeAudioData(await S.file.arrayBuffer()); }
+  catch { return { why: 'no audio track found' }; }
+  const sr = ab.sampleRate, ch = Math.min(2, ab.numberOfChannels), s0 = Math.floor(S.t0 * sr), n = Math.min(ab.length - s0, Math.ceil(dur * sr));
+  if (n <= 0) return { why: 'no audio in this range' };
+  for (const [codec, mux] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+    try { const r = await AudioEncoder.isConfigSupported({ codec, sampleRate: sr, numberOfChannels: ch, bitrate: 128000 }); if (r.supported) return { ab, sr, ch, s0, n, codec, mux }; } catch { }
+  }
+  return { why: 'no AAC/Opus encoder here' };
+}
+
+function endExport() {
+  exporting = null;
+  $('busy').classList.add('hidden');
+  resize(); lastSeg = -1; snapChase = true; idx = 0; $('scrub').value = 0; seekVideo();
+}
+
+// frame-perfect MP4: renders every output frame offline (not limited by phone speed), WebCodecs H.264 + mp4-muxer
+async function renderMp4() {
+  if (!window.VideoEncoder || !window.VideoFrame) return recordWebm('MP4 encoding isn\'t available in this browser, so recording WebM instead');
+  setPlaying(false);
+  const long = +$('recSize').value, a = S.aspect || S.W / S.H, fpsOut = 30;
+  let w = a >= 1 ? long : Math.round(long * a / 2) * 2, h = a >= 1 ? Math.round(long / a / 2) * 2 : long;
+  let codec = null;
+  for (const c of ['avc1.640028', 'avc1.4d0028', 'avc1.42e028', 'avc1.42001f']) {
+    try { const r = await VideoEncoder.isConfigSupported({ codec: c, width: w, height: h, bitrate: 8e6, framerate: fpsOut }); if (r.supported) { codec = c; break; } } catch { }
+  }
+  if (!codec && long > 1280) { $('recSize').value = '1280'; toast('1080p isn\'t supported here, so rendering 720p', 'warn'); return renderMp4(); }
+  if (!codec) return recordWebm('No MP4 encoder here, so recording WebM instead');
+
+  exporting = { cancel: false };
+  $('busy').classList.remove('hidden'); $('busyT').textContent = 'Preparing…'; $('busyBar').style.width = '0%';
+  const Mux = await import(MUX_URL);
+  const N = S.frames.length, dur = (N - 1) / S.fps, total = Math.max(1, Math.round(dur * fpsOut));
+  let audio = null, audioNote = '';
+  if ($('recAudio').checked) {
+    $('busyT').textContent = 'Reading audio…';
+    const r = await prepareAudio(dur);
+    if (r.why) audioNote = ` (no audio: ${r.why})`; else audio = r;
+  }
+  const muxer = new Mux.Muxer({
+    target: new Mux.ArrayBufferTarget(), fastStart: 'in-memory', firstTimestampBehavior: 'offset',
+    video: { codec: 'avc', width: w, height: h, frameRate: fpsOut },
+    ...(audio ? { audio: { codec: audio.mux, numberOfChannels: audio.ch, sampleRate: audio.sr } } : {})
+  });
+  let encErr = null;
+  const venc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => encErr = e });
+  venc.configure({ codec, width: w, height: h, bitrate: long >= 1920 ? 12e6 : 8e6, framerate: fpsOut });
+
+  renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  lastSeg = -1; snapChase = true;
+  if (mode === 'orbit') setMode('orbit'); // re-frame the first shot
+  for (let k = 0; k <= total; k++) {
+    if (exporting.cancel) break;
+    if (encErr) throw encErr;
+    const tsec = k / fpsOut;
+    renderAt(tsec * S.fps, tsec, 1 / fpsOut);
+    const vf = new VideoFrame(renderer.domElement, { timestamp: Math.round(k * 1e6 / fpsOut), duration: Math.round(1e6 / fpsOut) });
+    venc.encode(vf, { keyFrame: k % 60 === 0 }); vf.close();
+    while (venc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 4));
+    if (k % 4 === 0) {
+      $('busyT').textContent = `Rendering MP4 · frame ${k} / ${total}`; $('busyBar').style.width = (100 * k / total).toFixed(1) + '%';
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  if (exporting.cancel) { try { venc.close(); } catch { } endExport(); toast('Export cancelled', 'warn'); return; }
+  $('busyT').textContent = 'Finishing video…';
+  await venc.flush();
+  if (encErr) throw encErr;
+  if (audio) {
+    $('busyT').textContent = 'Adding audio…';
+    let aErr = null;
+    const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: e => aErr = e });
+    aenc.configure({ codec: audio.codec, sampleRate: audio.sr, numberOfChannels: audio.ch, bitrate: 128000 });
+    const CH = 4096;
+    for (let o = 0; o < audio.n; o += CH) {
+      const m = Math.min(CH, audio.n - o), data = new Float32Array(m * audio.ch);
+      for (let c = 0; c < audio.ch; c++) data.set(audio.ab.getChannelData(c).subarray(audio.s0 + o, audio.s0 + o + m), c * m);
+      const ad = new AudioData({ format: 'f32-planar', sampleRate: audio.sr, numberOfFrames: m, numberOfChannels: audio.ch, timestamp: Math.round(o / audio.sr * 1e6), data });
+      aenc.encode(ad); ad.close();
+    }
+    await aenc.flush();
+    if (aErr) { audioNote = ' (audio failed)'; console.warn(aErr); }
+  }
+  muxer.finalize();
+  download(new Blob([muxer.target.buffer], { type: 'video/mp4' }), `${baseName()}-${mode}-${style}.mp4`);
+  endExport();
+  toast(`Saved MP4 · ${w}×${h} · ${dur.toFixed(1)} s${audioNote}`, audioNote ? 'warn' : '', 6000);
 }
 
 </script>
