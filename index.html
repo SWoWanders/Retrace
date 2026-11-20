@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<title>Retrace — walk video to 3D street</title>
+<style>
+  :root{--bg:#0b0f17;--panel:#121a27;--line:#24324a;--ink:#e6edf7;--dim:#8a9ab3;--acc:#38e1c6;--acc2:#ffb347;--err:#ff5f6d}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  button,input,select{font:inherit;color:inherit}
+  .hidden{display:none!important}
+  h1{font:800 26px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;margin:0}
+  h1 span{color:var(--acc)}
+  .sub{color:var(--dim);margin:6px 0 0;font-size:14px}
+  .wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:14px}
+  .pick{display:flex;align-items:center;justify-content:center;gap:10px;border:2px dashed var(--line);border-radius:12px;padding:22px;cursor:pointer;color:var(--dim);text-align:center}
+  .pick:hover{border-color:var(--acc);color:var(--ink)}
+  .pick input{display:none}
+  video#vid{width:100%;max-height:42vh;border-radius:10px;background:#000;margin-top:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}
+  label.f input[type=number],label.f select{background:#0d1420;border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  label.f .val{color:var(--ink);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .btn{background:var(--acc);color:#04221d;border:0;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .btn.warn{background:var(--acc2);color:#2b1700}
+  .btn:disabled{opacity:.45;cursor:default}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .wide{width:100%}
+  .tips{color:var(--dim);font-size:13px;margin:10px 0 0;padding-left:18px}
+  .bar{height:8px;background:#0d1420;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .2s}
+  #pstat{font-variant-numeric:tabular-nums;margin:10px 0 4px;min-height:1.4em}
+  #pdet{color:var(--dim);font-size:13px;min-height:1.3em}
+  #pcan{width:100%;border-radius:8px;margin-top:10px;background:#000;image-rendering:pixelated}
+  /* viewer */
+  #viewer{position:fixed;inset:0;background:#000}
+  #stage{position:absolute;inset:0}
+  #stage canvas{display:block;width:100%;height:100%;touch-action:none}
+  .top{position:absolute;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:calc(env(safe-area-inset-top) + 10px) 10px 10px;background:linear-gradient(#000a,#0000)}
+  .top h1{font-size:16px;flex:1}
+  .ib{background:#0b0f17cc;border:1px solid var(--line);border-radius:10px;padding:8px 11px;cursor:pointer;backdrop-filter:blur(6px)}
+  .ib.on{border-color:var(--acc);color:var(--acc)}
+  .bottom{position:absolute;left:0;right:0;bottom:0;padding:10px 10px calc(env(safe-area-inset-bottom) + 12px);background:linear-gradient(#0000,#000c)}
+  .seg{display:flex;background:#0b0f17cc;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{background:none;border:0;padding:8px 12px;cursor:pointer;color:var(--dim)}
+  .seg button.on{background:var(--acc);color:#04221d;font-weight:700}
+  #play{width:46px;height:46px;border-radius:50%;padding:0;font-size:18px}
+  #scrub{flex:1}
+  #tlabel{font:12px ui-monospace,monospace;color:var(--dim);min-width:74px;text-align:right}
+  #inset{position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 62px);width:34vw;max-width:260px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#000}
+  #inset video{display:block;width:100%;max-height:none;margin:0;border-radius:0}
+  #recdot{position:absolute;left:12px;top:calc(env(safe-area-inset-top) + 60px);background:var(--err);color:#fff;border-radius:20px;padding:4px 10px;font-size:13px;font-weight:700}
+  .sheet{position:absolute;left:0;right:0;bottom:0;max-height:78vh;overflow:auto;background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 18px);box-shadow:0 -10px 40px #000a}
+  .sheet h3{margin:4px 0 10px;font-size:14px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+  .sheet .grid{margin-bottom:12px}
+  .chk{display:flex;gap:8px;align-items:center;font-size:14px}
+  #shots button{background:#0b0f17cc;border:1px solid var(--line);border-radius:16px;padding:4px 11px;color:var(--dim);cursor:pointer;font-size:13px}
+  #shots button.on{border-color:var(--acc);color:var(--acc)}
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translateX(-50%);background:#101826f2;border:1px solid var(--line);border-left:4px solid var(--acc);padding:10px 14px;border-radius:10px;max-width:92vw;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;font-size:14px}
+  #toast.show{opacity:1}
+  #toast.err{border-left-color:var(--err)}
+  #toast.warn{border-left-color:var(--acc2)}
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP ============ -->
+<section id="setup" class="wrap">
+  <h1>RE<span>TRACE</span></h1>
+  <p class="sub">Turn a walking video into a simple 3D street you can fly through along the same path. Everything runs on this device. No uploads, no accounts, no cost.</p>
+
+  <div class="card">
+    <label class="pick" id="pickLbl"><input type="file" id="file" accept="video/*">
+      <span>🎥 <b>Choose a video</b><br><small>a slow, steady walk works best (5–40 s)</small></span></label>
+    <div id="vidHome"><video id="vid" class="hidden" playsinline muted preload="auto"></video></div>
+  </div>
+
+  <div class="card" id="settings">
+    <div class="grid">
+      <label class="f">Start (s)<input type="number" id="tstart" value="0" min="0" step="0.1"></label>
+      <label class="f">End (s)<input type="number" id="tend" value="0" min="0" step="0.1"></label>
+      <label class="f">Frames per second <span class="val" id="fpsV">4</span><input type="range" id="fps" min="2" max="10" value="4"></label>
+      <label class="f">Max frames <span class="val" id="maxfV">120</span><input type="range" id="maxf" min="30" max="300" step="10" value="120"></label>
+      <label class="f">Camera field of view <span class="val" id="fovV">70°</span><input type="range" id="fov" min="40" max="120" value="70"></label>
+      <label class="f">Depth quality<select id="dq"><option value="auto">Auto (GPU if available)</option><option value="wasm">CPU only (slower)</option></select></label>
+    </div>
+    <div class="row" style="margin-top:12px;gap:14px">
+      <label class="chk"><input type="checkbox" id="rmMovers" checked> Remove people &amp; vehicles</label>
+      <label class="chk"><input type="checkbox" id="cuts" checked> Split at scene cuts</label>
+    </div>
+    <button class="btn wide" id="go" style="margin-top:14px" disabled>Build 3D street</button>
+    <ul class="tips">
+      <li>Walk forward smoothly. Avoid spinning on the spot or pointing into the sun.</li>
+      <li>FOV: ~70° for a normal phone camera, ~100–120° for ultra-wide or action cams.</li>
+      <li>People and vehicles are cut out of the blocks and shown as a live 3D layer instead (small extra model, ~4–15 MB).</li>
+      <li>Edited videos: each shot becomes its own piece, placed side by side. Still-camera shots become a <b>diorama</b>: a frozen 3D set with the moving parts playing inside it.</li>
+      <li>The first run downloads a free depth model (~27–100 MB), which is cached after that.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ PROCESSING ============ -->
+<section id="proc" class="wrap hidden">
+  <h1>RE<span>TRACE</span></h1>
+  <div class="card">
+    <div class="bar"><i id="pbar"></i></div>
+    <div id="pstat">Starting…</div>
+    <div id="pdet"></div>
+    <canvas id="pcan" width="720" height="202"></canvas>
+    <div class="row" style="margin-top:12px">
+      <button class="btn ghost" id="cancel">Stop &amp; use what's done</button>
+    </div>
+    <p class="tips" style="padding:0;list-style:none">Keep this screen on. Left: tracked points (green = agrees with the motion, red tint = people/vehicles). Right: estimated depth (bright = near).</p>
+  </div>
+</section>
+
+<!-- ============ VIEWER ============ -->
+<section id="viewer" class="hidden">
+  <div id="stage"></div>
+  <div class="top">
+    <h1>RE<span>TRACE</span></h1>
+    <button class="ib on" id="bInset" title="Show original video">🎞</button>
+    <button class="ib" id="bSound" title="Sound">🔇</button>
+    <button class="ib" id="bSet" title="Settings &amp; export">⚙</button>
+    <button class="ib" id="bNew" title="New video">＋</button>
+  </div>
+  <div id="inset"></div>
+  <div id="recdot" class="hidden">● REC</div>
+  <div class="bottom">
+    <div class="row hidden" id="shots" style="margin-bottom:8px;justify-content:center"></div>
+    <div class="row" style="margin-bottom:10px;justify-content:center">
+      <div class="seg" id="modeSeg">
+        <button data-m="ride" class="on">Ride</button><button data-m="chase">Chase</button><button data-m="orbit">Orbit</button>
+      </div>
+      <div class="seg" id="styleSeg">
+        <button data-s="voxels" class="on">Blocks</button><button data-s="points">Points</button>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="play">▶</button>
+      <input type="range" id="scrub" min="0" max="1" step="0.01" value="0">
+      <span id="tlabel">0.0 s</span>
+    </div>
+  </div>
+
+  <div class="sheet hidden" id="sheet">
+    <div class="row" style="justify-content:space-between"><h3>Look</h3><button class="ib" id="bClose">✕</button></div>
+    <div class="grid">
+      <label class="f">Block size <span class="val" id="voxV"></span><input type="range" id="vox" min="0.06" max="1" step="0.02" value="0.24"></label>
+      <label class="f">Far cutoff <span class="val" id="farV"></span><input type="range" id="far" min="0" max="0.4" step="0.01" value="0.07"></label>
+      <label class="f">Noise filter <span class="val" id="hitsV"></span><input type="range" id="hits" min="1" max="8" step="1" value="2"></label>
+      <label class="f">Palette <span class="val" id="palV"></span><input type="range" id="pal" min="0" max="12" step="1" value="0"></label>
+      <label class="f">Use every Nth frame <span class="val" id="strV"></span><input type="range" id="str" min="1" max="6" step="1" value="2"></label>
+      <label class="f">Path smoothing <span class="val" id="smV"></span><input type="range" id="sm" min="0" max="8" step="1" value="2"></label>
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <label class="chk"><input type="checkbox" id="lit" checked> Lighting</label>
+      <label class="chk"><input type="checkbox" id="showPath" checked> Path</label>
+      <label class="chk"><input type="checkbox" id="showGrid"> Grid</label>
+      <label class="chk"><input type="checkbox" id="fogOn" checked> Fog</label>
+      <label class="chk"><input type="checkbox" id="liveOn" checked> Live layer</label>
+      <label class="chk"><input type="checkbox" id="sway" checked> Diorama sway</label>
+      <label class="chk"><input type="checkbox" id="useMask" checked> Cut movers from blocks</label>
+    </div>
+    <h3>Export</h3>
+    <div class="row">
+      <button class="btn warn" id="bRec">● Record fly-through (.webm)</button>
+      <button class="btn ghost" id="bGlb">3D model (.glb)</button>
+      <button class="btn ghost" id="bPath">Camera path (.json)</button>
+    </div>
+    <p class="tips" style="padding:0;list-style:none" id="stats"></p>
+  </div>
+</section>
+
+<div id="toast"></div>
+
+<script id="core">
+// ===== Retrace core: image pyramid, features, LK optical flow, PnP, plane fit =====
+// Pure JS, no dependencies. Camera convention (OpenCV): x right, y down, z forward.
+(function (G) {
+  'use strict';
+
+  function bilinear(img, w, h, x, y) {
+    if (x < 0) x = 0; else if (x > w - 1.0001) x = w - 1.0001;
+    if (y < 0) y = 0; else if (y > h - 1.0001) y = h - 1.0001;
+    const x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0, i = y0 * w + x0;
+    const a = img[i], b = img[i + 1], c = img[i + w], d = img[i + w + 1];
+    const top = a + (b - a) * fx, bot = c + (d - c) * fx;
+    return top + (bot - top) * fy;
+  }
+
+  function rgbToGray(rgb, w, h) {
+    const n = w * h, g = new Float32Array(n);
+    for (let i = 0, j = 0; i < n; i++, j += 3) g[i] = 0.299 * rgb[j] + 0.587 * rgb[j + 1] + 0.114 * rgb[j + 2];
+    return g;
+  }
+
+  function rgbaToRgb(rgba) {
+    const n = rgba.length >> 2, out = new Uint8Array(n * 3);
+    for (let i = 0, j = 0, k = 0; i < n; i++, j += 4, k += 3) { out[k] = rgba[j]; out[k + 1] = rgba[j + 1]; out[k + 2] = rgba[j + 2]; }
+    return out;
+  }
+
+  // separable [1 2 1]/4 blur
+  function blur3(src, w, h) {
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const r = y * w;
+      for (let x = 0; x < w; x++) {
+        const l = src[r + (x > 0 ? x - 1 : 0)], c = src[r + x], rr = src[r + (x < w - 1 ? x + 1 : x)];
+        tmp[r + x] = (l + 2 * c + rr) * 0.25;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      const u = (y > 0 ? y - 1 : 0) * w, c = y * w, d = (y < h - 1 ? y + 1 : y) * w;
+      for (let x = 0; x < w; x++) out[c + x] = (tmp[u + x] + 2 * tmp[c + x] + tmp[d + x]) * 0.25;
+    }
+    return out;
+  }
+
+  function halve(src, w, h) {
+    const W = w >> 1, H = h >> 1, out = new Float32Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (2 * y) * w + 2 * x;
+      out[y * W + x] = (src[i] + src[i + 1] + src[i + w] + src[i + w + 1]) * 0.25;
+    }
+    return { d: out, w: W, h: H };
+  }
+
+  function grads(L) {
+    const { d, w, h } = L, gx = new Float32Array(w * h), gy = new Float32Array(w * h);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      gx[i] = (d[i + 1] - d[i - 1]) * 0.5;
+      gy[i] = (d[i + w] - d[i - w]) * 0.5;
+    }
+    L.gx = gx; L.gy = gy;
+    return L;
+  }
+
+  function buildPyramid(gray, w, h, levels) {
+    const pyr = [grads({ d: blur3(gray, w, h), w, h })];
+    for (let l = 1; l < levels; l++) {
+      const p = pyr[l - 1];
+      if ((p.w >> 1) < 40 || (p.h >> 1) < 40) break; // keep coarsest level usable
+      const hv = halve(blur3(p.d, p.w, p.h), p.w, p.h);
+      pyr.push(grads(hv));
+    }
+    return pyr;
+  }
+
+  function boxBlur(a, w, h, r) {
+    const tmp = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) { const xx = Math.min(w - 1, Math.max(0, x + k)); s += a[y * w + xx]; }
+      tmp[y * w + x] = s;
+    }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) { const yy = Math.min(h - 1, Math.max(0, y + k)); s += tmp[yy * w + x]; }
+      a[y * w + x] = s;
+    }
+  }
+
+  // Shi-Tomasi corners, one per grid cell for even coverage
+  function detectFeatures(L, maxN, margin) {
+    const { w, h, gx, gy } = L, n = w * h;
+    const a = new Float32Array(n), b = new Float32Array(n), c = new Float32Array(n);
+    for (let i = 0; i < n; i++) { a[i] = gx[i] * gx[i]; b[i] = gx[i] * gy[i]; c[i] = gy[i] * gy[i]; }
+    boxBlur(a, w, h, 2); boxBlur(b, w, h, 2); boxBlur(c, w, h, 2);
+    const lam = new Float32Array(n);
+    let maxL = 0;
+    for (let y = margin; y < h - margin; y++) for (let x = margin; x < w - margin; x++) {
+      const i = y * w + x, A = a[i], B = b[i], C = c[i];
+      const l = (A + C) * 0.5 - Math.sqrt(((A - C) * 0.5) ** 2 + B * B);
+      lam[i] = l; if (l > maxL) maxL = l;
+    }
+    const cell = Math.max(4, Math.floor(Math.sqrt((w - 2 * margin) * (h - 2 * margin) / maxN)));
+    const thr = Math.max(maxL * 0.004, 1e-6);
+    const pts = [];
+    for (let cy = margin; cy < h - margin; cy += cell) for (let cx = margin; cx < w - margin; cx += cell) {
+      let best = thr, bx = -1, by = -1;
+      const ye = Math.min(cy + cell, h - margin), xe = Math.min(cx + cell, w - margin);
+      for (let y = cy; y < ye; y++) for (let x = cx; x < xe; x++) {
+        const l = lam[y * w + x];
+        if (l > best) { best = l; bx = x; by = y; }
+      }
+      if (bx >= 0) pts.push(bx, by);
+    }
+    return Float32Array.from(pts);
+  }
+
+  // Brute-force global translation at a coarse level (seeds LK for big pans / fast motion)
+  function globalShift(A, B, range) {
+    let best = Infinity, bx = 0, by = 0;
+    const m = range, step = A.w * A.h > 6000 ? 2 : 1;
+    for (let dy = -range; dy <= range; dy++) for (let dx = -range; dx <= range; dx++) {
+      let s = 0, c = 0;
+      for (let y = m; y < A.h - m; y += step) {
+        const ra = y * A.w, rb = (y + dy) * B.w;
+        for (let x = m; x < A.w - m; x += step) { s += Math.abs(A.d[ra + x] - B.d[rb + x + dx]); c++; }
+      }
+      s = s / c + 0.02 * (dx * dx + dy * dy) ** 0.5; // tiny bias toward small motion
+      if (s < best) { best = s; bx = dx; by = dy; }
+    }
+    return [bx, by];
+  }
+
+  // Pyramidal Lucas–Kanade. Returns tracked positions in B and a status flag per point.
+  function trackLK(pA, pB, pts, win, iters, init) {
+    win = win || 7; iters = iters || 15;
+    const n = pts.length >> 1, out = new Float32Array(n * 2), st = new Uint8Array(n);
+    const levels = Math.min(pA.length, pB.length), sz = (2 * win + 1) ** 2;
+    if (!init) init = globalShift(pA[levels - 1], pB[levels - 1], Math.min(12, (pA[levels - 1].h >> 2)));
+    const T = new Float32Array(sz), IX = new Float32Array(sz), IY = new Float32Array(sz);
+    for (let k = 0; k < n; k++) {
+      let gx = init[0], gy = init[1], ok = true;
+      for (let l = levels - 1; l >= 0; l--) {
+        const A = pA[l], B = pB[l], sc = 1 / (1 << l);
+        const px = pts[2 * k] * sc, py = pts[2 * k + 1] * sc;
+        // sampling clamps at the image edge, so only reject points that are actually outside
+        if (px < 0 || py < 0 || px > A.w - 1 || py > A.h - 1) { ok = false; break; }
+        let G00 = 0, G01 = 0, G11 = 0, m = 0;
+        for (let dy = -win; dy <= win; dy++) for (let dx = -win; dx <= win; dx++, m++) {
+          const x = px + dx, y = py + dy;
+          T[m] = bilinear(A.d, A.w, A.h, x, y);
+          const ix = bilinear(A.gx, A.w, A.h, x, y), iy = bilinear(A.gy, A.w, A.h, x, y);
+          IX[m] = ix; IY[m] = iy;
+          G00 += ix * ix; G01 += ix * iy; G11 += iy * iy;
+        }
+        const det = G00 * G11 - G01 * G01;
+        const minEig = ((G00 + G11) - Math.sqrt((G00 - G11) ** 2 + 4 * G01 * G01)) * 0.5 / sz;
+        if (det < 1e-9 || minEig < 1e-3) {
+          if (l === 0) { ok = false; break; }
+          gx *= 2; gy *= 2; continue;
+        }
+        let vx = 0, vy = 0;
+        for (let it = 0; it < iters; it++) {
+          let bx = 0, by = 0; m = 0;
+          const ox = px + gx + vx, oy = py + gy + vy;
+          if (ox < -win || oy < -win || ox > B.w + win || oy > B.h + win) { break; }
+          for (let dy = -win; dy <= win; dy++) for (let dx = -win; dx <= win; dx++, m++) {
+            const diff = T[m] - bilinear(B.d, B.w, B.h, ox + dx, oy + dy);
+            bx += diff * IX[m]; by += diff * IY[m];
+          }
+          const dvx = (G11 * bx - G01 * by) / det, dvy = (G00 * by - G01 * bx) / det;
+          vx += dvx; vy += dvy;
+          if (dvx * dvx + dvy * dvy < 0.0009) break;
+        }
+        if (l > 0) { gx = 2 * (gx + vx); gy = 2 * (gy + vy); } else { gx += vx; gy += vy; }
+      }
+      const fx = pts[2 * k] + gx, fy = pts[2 * k + 1] + gy;
+      out[2 * k] = fx; out[2 * k + 1] = fy;
+      const L0 = pB[0];
+      st[k] = ok && isFinite(fx) && isFinite(fy) && fx >= 1 && fy >= 1 && fx <= L0.w - 2 && fy <= L0.h - 2 ? 1 : 0;
+    }
+    return { pts: out, st, init };
+  }
+
+  // ---------- small linear algebra ----------
+  const I3 = () => [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  function mul3(A, B) {
+    const C = new Array(9);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++)
+      C[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c];
+    return C;
+  }
+  const mv3 = (R, v) => [R[0] * v[0] + R[1] * v[1] + R[2] * v[2], R[3] * v[0] + R[4] * v[1] + R[5] * v[2], R[6] * v[0] + R[7] * v[1] + R[8] * v[2]];
+  const tr3 = R => [R[0], R[3], R[6], R[1], R[4], R[7], R[2], R[5], R[8]];
+  function expSO3(wx, wy, wz) {
+    const th = Math.hypot(wx, wy, wz);
+    if (th < 1e-12) return I3();
+    const kx = wx / th, ky = wy / th, kz = wz / th, s = Math.sin(th), c = Math.cos(th), v = 1 - c;
+    return [
+      c + kx * kx * v, kx * ky * v - kz * s, kx * kz * v + ky * s,
+      ky * kx * v + kz * s, c + ky * ky * v, ky * kz * v - kx * s,
+      kz * kx * v - ky * s, kz * ky * v + kx * s, c + kz * kz * v];
+  }
+  function solve6(H, g) { // solves H x = g (H 36, g 6), in place copies
+    const A = H.slice(), b = g.slice(), n = 6;
+    for (let i = 0; i < n; i++) {
+      let p = i, mx = Math.abs(A[i * n + i]);
+      for (let r = i + 1; r < n; r++) if (Math.abs(A[r * n + i]) > mx) { mx = Math.abs(A[r * n + i]); p = r; }
+      if (mx < 1e-15) return null;
+      if (p !== i) { for (let c = 0; c < n; c++) { const t = A[i * n + c]; A[i * n + c] = A[p * n + c]; A[p * n + c] = t; } const t = b[i]; b[i] = b[p]; b[p] = t; }
+      for (let r = i + 1; r < n; r++) {
+        const f = A[r * n + i] / A[i * n + i];
+        if (!f) continue;
+        for (let c = i; c < n; c++) A[r * n + c] -= f * A[i * n + c];
+        b[r] -= f * b[i];
+      }
+    }
+    const x = new Array(n);
+    for (let i = n - 1; i >= 0; i--) { let s = b[i]; for (let c = i + 1; c < n; c++) s -= A[i * n + c] * x[c]; x[i] = s / A[i * n + i]; }
+    return x;
+  }
+
+  function reprojErr(X, uv, K, R, t, i) {
+    const x = X[3 * i], y = X[3 * i + 1], z = X[3 * i + 2];
+    const Px = R[0] * x + R[1] * y + R[2] * z + t[0], Py = R[3] * x + R[4] * y + R[5] * z + t[1], Pz = R[6] * x + R[7] * y + R[8] * z + t[2];
+    if (Pz < 1e-4) return Infinity;
+    const u = K.fx * Px / Pz + K.cx, v = K.fy * Py / Pz + K.cy;
+    return Math.hypot(u - uv[2 * i], v - uv[2 * i + 1]);
+  }
+
+  // Gauss–Newton / LM pose refinement, left-perturbation on SE(3)
+  function refinePose(X, uv, K, idx, R, t, iters, huber) {
+    R = R.slice(); t = t.slice();
+    for (let it = 0; it < iters; it++) {
+      const H = new Array(36).fill(0), g = new Array(6).fill(0);
+      let used = 0;
+      for (let q = 0; q < idx.length; q++) {
+        const i = idx[q], x = X[3 * i], y = X[3 * i + 1], z = X[3 * i + 2];
+        const PX = R[0] * x + R[1] * y + R[2] * z + t[0], PY = R[3] * x + R[4] * y + R[5] * z + t[1], PZ = R[6] * x + R[7] * y + R[8] * z + t[2];
+        if (PZ < 1e-4) continue;
+        const iz = 1 / PZ, ru = K.fx * PX * iz + K.cx - uv[2 * i], rv = K.fy * PY * iz + K.cy - uv[2 * i + 1];
+        let w = 1;
+        if (huber) { const e = Math.hypot(ru, rv); if (e > huber) w = huber / e; }
+        const a = K.fx * iz, b = -K.fx * PX * iz * iz, c = K.fy * iz, d = -K.fy * PY * iz * iz;
+        const Ju = [b * PY, a * PZ - b * PX, -a * PY, a, 0, b];
+        const Jv = [-c * PZ + d * PY, -d * PX, c * PX, 0, c, d];
+        for (let r = 0; r < 6; r++) {
+          g[r] += w * (Ju[r] * ru + Jv[r] * rv);
+          for (let s = r; s < 6; s++) H[r * 6 + s] += w * (Ju[r] * Ju[s] + Jv[r] * Jv[s]);
+        }
+        used++;
+      }
+      if (used < 4) break;
+      for (let r = 0; r < 6; r++) { for (let s = 0; s < r; s++) H[r * 6 + s] = H[s * 6 + r]; H[r * 6 + r] *= 1.0001; H[r * 6 + r] += 1e-9; }
+      const dx = solve6(H, g.map(v => -v));
+      if (!dx || dx.some(v => !isFinite(v))) break;
+      const dR = expSO3(dx[0], dx[1], dx[2]);
+      R = mul3(dR, R);
+      const tt = mv3(dR, t);
+      t = [tt[0] + dx[3], tt[1] + dx[4], tt[2] + dx[5]];
+      if (Math.hypot(dx[0], dx[1], dx[2]) < 1e-7 && Math.hypot(dx[3], dx[4], dx[5]) < 1e-7) break;
+    }
+    return { R, t };
+  }
+
+  function countInliers(X, uv, K, R, t, thr) {
+    const n = X.length / 3, inl = new Uint8Array(n);
+    let c = 0;
+    for (let i = 0; i < n; i++) if (reprojErr(X, uv, K, R, t, i) < thr) { inl[i] = 1; c++; }
+    return { inl, c };
+  }
+
+  function makeRng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+  function ransacPnP(X, uv, K, R0, t0, opts) {
+    opts = opts || {};
+    const n = X.length / 3, thr = opts.thr || 2, iters = opts.iters || 40, m = opts.sample || 6;
+    if (n < 8) return null;
+    const rnd = makeRng(opts.seed || 12345), all = Array.from({ length: n }, (_, i) => i);
+    let best = null;
+    const consider = (P) => {
+      const r = countInliers(X, uv, K, P.R, P.t, thr);
+      if (!best || r.c > best.nIn) best = { R: P.R, t: P.t, inliers: r.inl, nIn: r.c };
+    };
+    consider({ R: R0, t: t0 });
+    consider(refinePose(X, uv, K, all, R0, t0, 10, thr * 1.5));
+    consider(refinePose(X, uv, K, all, I3(), [0, 0, 0], 10, thr * 1.5));
+    for (let it = 0; it < iters; it++) {
+      const sub = [];
+      while (sub.length < m) { const j = (rnd() * n) | 0; if (!sub.includes(j)) sub.push(j); }
+      consider(refinePose(X, uv, K, sub, best.R, best.t, 6, 0));
+      if (best.nIn > 0.85 * n) break;
+    }
+    for (let k = 0; k < 2; k++) {
+      const idx = []; for (let i = 0; i < n; i++) if (best.inliers[i]) idx.push(i);
+      if (idx.length < 6) break;
+      const P = refinePose(X, uv, K, idx, best.R, best.t, 10, thr);
+      const r = countInliers(X, uv, K, P.R, P.t, thr);
+      if (r.c >= best.nIn * 0.95) best = { R: P.R, t: P.t, inliers: r.inl, nIn: r.c };
+    }
+    return best;
+  }
+
+  function median(a) {
+    if (!a.length) return NaN;
+    const s = Float64Array.from(a).sort();
+    const h = s.length >> 1;
+    return s.length % 2 ? s[h] : 0.5 * (s[h - 1] + s[h]);
+  }
+
+  // resample a (sw x sh) float map to (W x H) with bilinear
+  function resample(src, sw, sh, W, H) {
+    const out = new Float32Array(W * H), sx = sw / W, sy = sh / H;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+      out[y * W + x] = bilinear(src, sw, sh, (x + 0.5) * sx - 0.5, (y + 0.5) * sy - 0.5);
+    return out;
+  }
+
+  // relative disparity -> 0..1 using robust percentiles
+  function normalizeDisparity(d) {
+    const n = d.length, step = Math.max(1, Math.floor(n / 6000)), samp = [];
+    for (let i = 0; i < n; i += step) samp.push(d[i]);
+    samp.sort((a, b) => a - b);
+    const lo = samp[Math.floor(samp.length * 0.01)], hi = samp[Math.floor(samp.length * 0.995)];
+    const inv = 1 / Math.max(1e-6, hi - lo), out = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const v = (d[i] - lo) * inv; out[i] = v < 0 ? 0 : v > 1 ? 1 : v; }
+    return out;
+  }
+
+  // One tracking step: prev frame -> current frame.
+  // prev/cur: { pyr, dn (Float32 0..1 disparity), s (scale, prev only), R, t (prev only) }
+  function trackStep(prev, cur, K, lastRel, eps, opts) {
+    opts = opts || {};
+    const L0 = prev.pyr[0], W = L0.w, H = L0.h;
+    const pts = detectFeatures(L0, opts.maxFeatures || 450, 8);
+    const fw = trackLK(prev.pyr, cur.pyr, pts);
+    const bw = trackLK(cur.pyr, prev.pyr, fw.pts, 0, 0, [-fw.init[0], -fw.init[1]]);
+    const X = [], uv = [], src = [];
+    for (let k = 0; k < pts.length / 2; k++) {
+      if (!fw.st[k] || !bw.st[k]) continue;
+      const ex = bw.pts[2 * k] - pts[2 * k], ey = bw.pts[2 * k + 1] - pts[2 * k + 1];
+      if (ex * ex + ey * ey > 1) continue;
+      const x = pts[2 * k], y = pts[2 * k + 1], d = bilinear(prev.dn, W, H, x, y);
+      if (d < 0.03) continue; // sky / infinitely far: no reliable depth
+      if (prev.mask && prev.mask[(y | 0) * W + (x | 0)]) continue; // person / vehicle: moves on its own
+      if (cur.mask) { const ux = Math.round(fw.pts[2 * k]), uy = Math.round(fw.pts[2 * k + 1]); if (cur.mask[Math.min(H - 1, Math.max(0, uy)) * W + Math.min(W - 1, Math.max(0, ux))]) continue; }
+      const z = prev.s / (d + eps);
+      X.push((x - K.cx) / K.fx * z, (y - K.cy) / K.fy * z, z);
+      uv.push(fw.pts[2 * k], fw.pts[2 * k + 1]);
+      src.push(x, y);
+    }
+    const n = X.length / 3, Xa = Float64Array.from(X), uva = Float64Array.from(uv);
+    let rel = null;
+    if (n >= 12) {
+      const r = ransacPnP(Xa, uva, K, lastRel.R, lastRel.t, { thr: opts.thr || 2, seed: opts.seed });
+      if (r && r.nIn >= Math.max(12, 0.25 * n)) rel = r;
+    }
+    const ok = !!rel;
+    if (!ok) rel = { R: lastRel.R.slice(), t: lastRel.t.slice(), inliers: new Uint8Array(n), nIn: 0 };
+    // align current depth scale to predicted depths of tracked points
+    const ratios = [];
+    for (let i = 0; i < n; i++) {
+      if (ok && !rel.inliers[i]) continue;
+      const P = mv3(rel.R, [Xa[3 * i], Xa[3 * i + 1], Xa[3 * i + 2]]);
+      const pz = P[2] + rel.t[2];
+      const d2 = bilinear(cur.dn, W, H, uva[2 * i], uva[2 * i + 1]);
+      if (d2 < 0.08 || pz <= 0) continue;
+      ratios.push(pz * (d2 + eps));
+    }
+    let s = ratios.length >= 8 ? median(ratios) : prev.s;
+    if (!isFinite(s) || s <= 0) s = prev.s;
+    s = prev.s * Math.min(1.25, Math.max(0.8, s / prev.s));
+    const R = mul3(rel.R, prev.R), tt = mv3(rel.R, prev.t);
+    const t = [tt[0] + rel.t[0], tt[1] + rel.t[1], tt[2] + rel.t[2]];
+    return { R, t, s, rel: { R: rel.R, t: rel.t }, ok, nTracks: n, nIn: rel.nIn, src, dst: uv, inliers: rel.inliers };
+  }
+
+  // symmetric 3x3 eigen decomposition (Jacobi). Returns {values, vectors(columns, row-major 9)}
+  function eigSym3(M) {
+    const a = M.slice(), V = I3();
+    for (let sweep = 0; sweep < 30; sweep++) {
+      let off = Math.abs(a[1]) + Math.abs(a[2]) + Math.abs(a[5]);
+      if (off < 1e-14) break;
+      for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) {
+        const apq = a[p * 3 + q];
+        if (Math.abs(apq) < 1e-18) continue;
+        const app = a[p * 3 + p], aqq = a[q * 3 + q];
+        const th = (aqq - app) / (2 * apq);
+        const tt = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+        const c = 1 / Math.sqrt(tt * tt + 1), s = tt * c;
+        for (let k = 0; k < 3; k++) { // A = A J
+          const akp = a[k * 3 + p], akq = a[k * 3 + q];
+          a[k * 3 + p] = c * akp - s * akq; a[k * 3 + q] = s * akp + c * akq;
+        }
+        for (let k = 0; k < 3; k++) { // A = J^T A
+          const apk = a[p * 3 + k], aqk = a[q * 3 + k];
+          a[p * 3 + k] = c * apk - s * aqk; a[q * 3 + k] = s * apk + c * aqk;
+        }
+        for (let k = 0; k < 3; k++) {
+          const vkp = V[k * 3 + p], vkq = V[k * 3 + q];
+          V[k * 3 + p] = c * vkp - s * vkq; V[k * 3 + q] = s * vkp + c * vkq;
+        }
+      }
+    }
+    return { values: [a[0], a[4], a[8]], vectors: V };
+  }
+
+  // RANSAC plane with normal constrained near `up`. pts: flat [x,y,z,...]. Returns {n:[3], d, count} with n·p + d = 0
+  function fitGroundPlane(pts, up, thr, maxAngleDeg, seed) {
+    const n = pts.length / 3;
+    if (n < 30) return null;
+    const rnd = makeRng(seed || 777), cosMax = Math.cos((maxAngleDeg || 35) * Math.PI / 180);
+    let best = null;
+    for (let it = 0; it < 300; it++) {
+      const i = (rnd() * n) | 0, j = (rnd() * n) | 0, k = (rnd() * n) | 0;
+      if (i === j || j === k || i === k) continue;
+      const ax = pts[3 * j] - pts[3 * i], ay = pts[3 * j + 1] - pts[3 * i + 1], az = pts[3 * j + 2] - pts[3 * i + 2];
+      const bx = pts[3 * k] - pts[3 * i], by = pts[3 * k + 1] - pts[3 * i + 1], bz = pts[3 * k + 2] - pts[3 * i + 2];
+      let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+      const ln = Math.hypot(nx, ny, nz); if (ln < 1e-9) continue;
+      nx /= ln; ny /= ln; nz /= ln;
+      let dot = nx * up[0] + ny * up[1] + nz * up[2];
+      if (dot < 0) { nx = -nx; ny = -ny; nz = -nz; dot = -dot; }
+      if (dot < cosMax) continue;
+      const d = -(nx * pts[3 * i] + ny * pts[3 * i + 1] + nz * pts[3 * i + 2]);
+      let c = 0;
+      for (let q = 0; q < n; q++) if (Math.abs(nx * pts[3 * q] + ny * pts[3 * q + 1] + nz * pts[3 * q + 2] + d) < thr) c++;
+      if (!best || c > best.count) best = { n: [nx, ny, nz], d, count: c };
+    }
+    if (!best || best.count < 30) return null;
+    // PCA refine on inliers
+    let cx = 0, cy = 0, cz = 0, m = 0;
+    const inl = [];
+    for (let q = 0; q < n; q++) {
+      const x = pts[3 * q], y = pts[3 * q + 1], z = pts[3 * q + 2];
+      if (Math.abs(best.n[0] * x + best.n[1] * y + best.n[2] * z + best.d) < thr) { inl.push(x, y, z); cx += x; cy += y; cz += z; m++; }
+    }
+    cx /= m; cy /= m; cz /= m;
+    const Cv = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (let q = 0; q < m; q++) {
+      const x = inl[3 * q] - cx, y = inl[3 * q + 1] - cy, z = inl[3 * q + 2] - cz;
+      Cv[0] += x * x; Cv[1] += x * y; Cv[2] += x * z; Cv[4] += y * y; Cv[5] += y * z; Cv[8] += z * z;
+    }
+    Cv[3] = Cv[1]; Cv[6] = Cv[2]; Cv[7] = Cv[5];
+    const e = eigSym3(Cv);
+    let mi = 0; for (let q = 1; q < 3; q++) if (e.values[q] < e.values[mi]) mi = q;
+    let nn = [e.vectors[mi], e.vectors[3 + mi], e.vectors[6 + mi]];
+    if (nn[0] * best.n[0] + nn[1] * best.n[1] + nn[2] * best.n[2] < 0) nn = nn.map(v => -v);
+    if (nn[0] * up[0] + nn[1] * up[1] + nn[2] * up[2] < cosMax) nn = best.n; // refinement wandered off
+    return { n: nn, d: -(nn[0] * cx + nn[1] * cy + nn[2] * cz), count: best.count };
+  }
+
+
+  // ================= scene building =================
+  const SRGB2LIN = new Float32Array(256);
+  for (let i = 0; i < 256; i++) { const c = i / 255; SRGB2LIN[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+
+  function matToQuat(m) { // row-major 3x3 -> [x,y,z,w]
+    const tr = m[0] + m[4] + m[8];
+    let x, y, z, w;
+    if (tr > 0) { const s = 0.5 / Math.sqrt(tr + 1); w = 0.25 / s; x = (m[7] - m[5]) * s; y = (m[2] - m[6]) * s; z = (m[3] - m[1]) * s; }
+    else if (m[0] > m[4] && m[0] > m[8]) { const s = 2 * Math.sqrt(1 + m[0] - m[4] - m[8]); w = (m[7] - m[5]) / s; x = 0.25 * s; y = (m[1] + m[3]) / s; z = (m[2] + m[6]) / s; }
+    else if (m[4] > m[8]) { const s = 2 * Math.sqrt(1 + m[4] - m[0] - m[8]); w = (m[2] - m[6]) / s; x = (m[1] + m[3]) / s; y = 0.25 * s; z = (m[5] + m[7]) / s; }
+    else { const s = 2 * Math.sqrt(1 + m[8] - m[0] - m[4]); w = (m[3] - m[1]) / s; x = (m[2] + m[6]) / s; y = (m[5] + m[7]) / s; z = 0.25 * s; }
+    const l = Math.hypot(x, y, z, w); return [x / l, y / l, z / l, w / l];
+  }
+
+  // CV pose (world->cam R,t) -> three.js camera centre + rotation (Y up, camera looks -Z)
+  function poseToThree(R, t) {
+    const Rt = tr3(R), c = mv3(Rt, t);
+    const F = [1, -1, -1], M = new Array(9);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[i * 3 + j] = F[i] * Rt[i * 3 + j] * F[j];
+    return { C: [-c[0], c[1], c[2]], M };
+  }
+
+  function computeAlignment(poses, groundPts, scale) {
+    const up = [0, 0, 0];
+    for (const p of poses) { up[0] += p.M[1]; up[1] += p.M[4]; up[2] += p.M[7]; }
+    const ul = Math.hypot(...up) || 1; up[0] /= ul; up[1] /= ul; up[2] /= ul;
+    const plane = fitGroundPlane(groundPts, up, 0.03 * scale, 35);
+    const n = plane ? plane.n : up;
+    // rotate n onto +Y
+    const axis = [-n[2], 0, n[0]], s = Math.hypot(...axis), ang = Math.atan2(s, n[1]);
+    let R1 = s < 1e-9 ? I3() : expSO3(axis[0] / s * ang, 0, axis[2] / s * ang);
+    // yaw: direction of travel -> -Z
+    const a = poses[0].C, b = poses[poses.length - 1].C;
+    let dir = mv3(R1, [b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+    if (Math.hypot(dir[0], dir[2]) < 0.05 * scale) dir = mv3(R1, [-poses[0].M[2], -poses[0].M[5], -poses[0].M[8]]);
+    const phi = Math.PI - Math.atan2(dir[0], dir[2]);
+    const M = mul3(expSO3(0, phi, 0), R1);
+    let groundY;
+    if (plane) groundY = mv3(M, [-plane.d * n[0], -plane.d * n[1], -plane.d * n[2]])[1];
+    else {
+      const ys = []; for (let i = 0; i < groundPts.length; i += 3) ys.push(mv3(M, [groundPts[i], groundPts[i + 1], groundPts[i + 2]])[1]);
+      ys.sort((p, q) => p - q); groundY = ys.length ? ys[Math.floor(ys.length * 0.1)] : mv3(M, a)[1] - 0.15 * scale;
+    }
+    const c0 = mv3(M, a);
+    return { M, T: [-c0[0], -groundY, -c0[2]], planeFound: !!plane };
+  }
+
+  // frames: [{rgb, dn(Uint16), s, R, t}], K, W, H. params: {stride, step, far, voxel, minHits, levels, eps}
+  function buildWorld(frames, W, H, K, params, align) {
+    const P = Object.assign({ stride: 2, step: 3, far: 0.06, voxel: 0.25, minHits: 2, levels: 0, eps: 0.06, edge: 1.12, sceneScale: 10 }, params);
+    const poses = frames.map(f => poseToThree(f.R, f.t));
+    const step = P.step, eps = P.eps, inv16 = 1 / 65535;
+    const nF = Math.ceil(frames.length / P.stride), perF = Math.ceil(W / step) * Math.ceil(H / step);
+    let pos = new Float32Array(nF * perF * 3), col = new Uint8Array(nF * perF * 3), np = 0;
+    const ground = [];
+    for (let fi = 0; fi < frames.length; fi += P.stride) {
+      const f = frames[fi], pose = poses[fi], M = pose.M, Cc = pose.C, dn = f.dn, rgb = f.rgb, mask = P.useMask === false ? null : f.mask;
+      for (let y = 0; y < H - step; y += step) for (let x = 0; x < W - step; x += step) {
+        const i = y * W + x, d = dn[i] * inv16;
+        if (d < P.far || (mask && mask[i])) continue;
+        const z = f.s / (d + eps), z1 = f.s / (dn[i + step] * inv16 + eps), z2 = f.s / (dn[i + step * W] * inv16 + eps);
+        const r1 = z / z1, r2 = z / z2;
+        if (r1 > P.edge || r1 < 1 / P.edge || r2 > P.edge || r2 < 1 / P.edge) continue; // flying pixels at depth edges
+        // camera-space point in three convention: (x, -y, -z)
+        const cx = (x - K.cx) / K.fx * z, cy = -(y - K.cy) / K.fy * z, cz = -z;
+        const wx = M[0] * cx + M[1] * cy + M[2] * cz + Cc[0];
+        const wy = M[3] * cx + M[4] * cy + M[5] * cz + Cc[1];
+        const wz = M[6] * cx + M[7] * cy + M[8] * cz + Cc[2];
+        pos[np * 3] = wx; pos[np * 3 + 1] = wy; pos[np * 3 + 2] = wz;
+        col[np * 3] = rgb[i * 3]; col[np * 3 + 1] = rgb[i * 3 + 1]; col[np * 3 + 2] = rgb[i * 3 + 2];
+        np++;
+        if (y > H * 0.6 && ((x + y) & 7) === 0 && ground.length < 60000) ground.push(wx, wy, wz);
+      }
+    }
+    if (!align) align = computeAlignment(poses, ground, P.sceneScale);
+    const AM = align.M, AT = align.T;
+    for (let k = 0; k < np; k++) {
+      const x = pos[3 * k], y = pos[3 * k + 1], z = pos[3 * k + 2];
+      pos[3 * k] = AM[0] * x + AM[1] * y + AM[2] * z + AT[0];
+      pos[3 * k + 1] = AM[3] * x + AM[4] * y + AM[5] * z + AT[1];
+      pos[3 * k + 2] = AM[6] * x + AM[7] * y + AM[8] * z + AT[2];
+    }
+    pos = pos.subarray(0, np * 3); col = col.subarray(0, np * 3);
+    const path = poses.map(p => {
+      const c = mv3(AM, p.C);
+      return { p: [c[0] + AT[0], c[1] + AT[1], c[2] + AT[2]], q: matToQuat(mul3(AM, p.M)) };
+    });
+    const vox = voxelize(pos, col, np, P);
+    const colLin = new Float32Array(np * 3);
+    for (let k = 0; k < np * 3; k++) colLin[k] = SRGB2LIN[col[k]];
+    return { points: { pos, col: colLin, count: np }, voxels: vox, path, align };
+  }
+
+  function voxelize(pos, col, np, P) {
+    const inv = 1 / P.voxel, OFF = 65536, M = 131072, MM = M * M;
+    const map = new Map();
+    let cnt = 0, cap = 1 << 16;
+    let sums = new Float32Array(cap * 3), hits = new Uint32Array(cap), keys = new Float64Array(cap);
+    for (let k = 0; k < np; k++) {
+      const ix = Math.floor(pos[3 * k] * inv), iy = Math.floor(pos[3 * k + 1] * inv), iz = Math.floor(pos[3 * k + 2] * inv);
+      if (Math.abs(ix) >= OFF || Math.abs(iy) >= OFF || Math.abs(iz) >= OFF) continue;
+      const key = (ix + OFF) * MM + (iy + OFF) * M + (iz + OFF);
+      let idx = map.get(key);
+      if (idx === undefined) {
+        if (cnt === cap) {
+          cap *= 2;
+          const s2 = new Float32Array(cap * 3); s2.set(sums); sums = s2;
+          const h2 = new Uint32Array(cap); h2.set(hits); hits = h2;
+          const k2 = new Float64Array(cap); k2.set(keys); keys = k2;
+        }
+        idx = cnt++; map.set(key, idx); keys[idx] = key;
+      }
+      sums[idx * 3] += col[3 * k]; sums[idx * 3 + 1] += col[3 * k + 1]; sums[idx * 3 + 2] += col[3 * k + 2];
+      hits[idx]++;
+    }
+    const keep = new Map(); // key -> voxel index (kept)
+    for (let i = 0; i < cnt; i++) if (hits[i] >= P.minHits) keep.set(keys[i], i);
+    const L = P.levels > 1 ? P.levels - 1 : 0;
+    // faces: +X -X +Y -Y +Z -Z  (corner offsets CCW from outside)
+    const FACES = [
+      [[1, 0, 0], M * M, [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]],
+      [[-1, 0, 0], -M * M, [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]],
+      [[0, 1, 0], M, [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]]],
+      [[0, -1, 0], -M, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]],
+      [[0, 0, 1], 1, [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]],
+      [[0, 0, -1], -1, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]]]];
+    let nFaces = 0;
+    for (const [key] of keep) for (const F of FACES) if (!keep.has(key + F[1])) nFaces++;
+    const vp = new Float32Array(nFaces * 12), vn = new Float32Array(nFaces * 12), vc = new Float32Array(nFaces * 12), ix = new Uint32Array(nFaces * 6);
+    let f = 0;
+    const vs = P.voxel;
+    for (const [key, i] of keep) {
+      const gx = Math.floor(key / MM) - OFF, rem = key - (gx + OFF) * MM, gy = Math.floor(rem / M) - OFF, gz = rem - (gy + OFF) * M - OFF;
+      let r = sums[i * 3] / hits[i], g = sums[i * 3 + 1] / hits[i], b = sums[i * 3 + 2] / hits[i];
+      if (L) { r = Math.round(r / 255 * L) / L * 255; g = Math.round(g / 255 * L) / L * 255; b = Math.round(b / 255 * L) / L * 255; }
+      const lr = SRGB2LIN[Math.round(r)], lg = SRGB2LIN[Math.round(g)], lb = SRGB2LIN[Math.round(b)];
+      for (const F of FACES) {
+        if (keep.has(key + F[1])) continue;
+        for (let c = 0; c < 4; c++) {
+          const o = f * 12 + c * 3, cn = F[2][c];
+          vp[o] = (gx + cn[0]) * vs; vp[o + 1] = (gy + cn[1]) * vs; vp[o + 2] = (gz + cn[2]) * vs;
+          vn[o] = F[0][0]; vn[o + 1] = F[0][1]; vn[o + 2] = F[0][2];
+          vc[o] = lr; vc[o + 1] = lg; vc[o + 2] = lb;
+        }
+        const b4 = f * 4;
+        ix.set([b4, b4 + 1, b4 + 2, b4, b4 + 2, b4 + 3], f * 6);
+        f++;
+      }
+    }
+    return { position: vp, normal: vn, color: vc, index: ix, count: keep.size, faces: nFaces };
+  }
+
+  // moving-average smoothing of a path (positions + quaternions)
+  function smoothPath(path, win) {
+    if (!win) return path.map(p => ({ p: p.p.slice(), q: p.q.slice() }));
+    return path.map((_, i) => {
+      const p = [0, 0, 0], q = [0, 0, 0, 0], ref = path[i].q; let n = 0;
+      for (let j = Math.max(0, i - win); j <= Math.min(path.length - 1, i + win); j++) {
+        const a = path[j];
+        p[0] += a.p[0]; p[1] += a.p[1]; p[2] += a.p[2];
+        const sgn = (a.q[0] * ref[0] + a.q[1] * ref[1] + a.q[2] * ref[2] + a.q[3] * ref[3]) < 0 ? -1 : 1;
+        for (let k = 0; k < 4; k++) q[k] += sgn * a.q[k];
+        n++;
+      }
+      const l = Math.hypot(...q);
+      return { p: p.map(v => v / n), q: q.map(v => v / l) };
+    });
+  }
+
+  // ================= shots, still cameras, masks =================
+  function colorHist(rgb) {
+    const h = new Float32Array(48), n = rgb.length / 3;
+    let c = 0;
+    for (let i = 0; i < n; i += 2) { const j = i * 3; h[rgb[j] >> 4]++; h[16 + (rgb[j + 1] >> 4)]++; h[32 + (rgb[j + 2] >> 4)]++; c++; }
+    for (let k = 0; k < 48; k++) h[k] /= c * 3;
+    return h;
+  }
+  function histDiff(a, b) { let s = 0; for (let k = 0; k < a.length; k++) s += Math.abs(a[k] - b[k]); return s / 2; }
+  // decide whether frame i starts a new shot. track = trackStep result (or null)
+  function isCut(hd, track) {
+    const lost = !track || !track.ok || track.nIn < 20;
+    return hd > 0.45 || (hd > 0.2 && lost);
+  }
+
+  // still camera: centre barely moves and view barely turns (relative to scene scale)
+  function cameraSpread(frames, sceneScale) {
+    let maxD = 0, maxA = 0;
+    const c0 = mv3(tr3(frames[0].R), frames[0].t);
+    for (const f of frames) {
+      const c = mv3(tr3(f.R), f.t);
+      maxD = Math.max(maxD, Math.hypot(c[0] - c0[0], c[1] - c0[1], c[2] - c0[2]));
+      const dR = mul3(f.R, tr3(frames[0].R));
+      maxA = Math.max(maxA, Math.acos(Math.max(-1, Math.min(1, (dR[0] + dR[4] + dR[8] - 1) / 2))) * 180 / Math.PI);
+    }
+    return { dist: maxD / sceneScale, angle: maxA };
+  }
+  function isStill(frames, sceneScale) {
+    if (frames.length < 3) return false;
+    const s = cameraSpread(frames, sceneScale);
+    return s.dist < 0.025 && s.angle < 2.5;
+  }
+
+  // per-pixel median colour + depth over (up to maxN) frames: removes anything that moves
+  function medianBackground(frames, W, H, maxN) {
+    const step = Math.max(1, Math.ceil(frames.length / (maxN || 41))), use = [];
+    for (let i = 0; i < frames.length; i += step) use.push(frames[i]);
+    const n = use.length, mid = n >> 1, rgb = new Uint8Array(W * H * 3), dn = new Uint16Array(W * H);
+    const buf = new Float64Array(n);
+    const med = () => { buf.sort(); return n % 2 ? buf[mid] : (buf[mid - 1] + buf[mid]) / 2; };
+    for (let i = 0; i < W * H; i++) {
+      for (let c = 0; c < 3; c++) { for (let k = 0; k < n; k++) buf[k] = use[k].rgb[i * 3 + c]; rgb[i * 3 + c] = Math.round(med()); }
+      for (let k = 0; k < n; k++) buf[k] = use[k].dn[i]; dn[i] = Math.round(med());
+    }
+    const ss = new Float64Array(n); use.forEach((f, k) => ss[k] = f.s); ss.sort();
+    return { rgb, dn, s: ss[mid], R: I3(), t: [0, 0, 0], mask: null };
+  }
+
+  function dilate(mask, W, H, r) {
+    const out = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!mask[y * W + x]) continue;
+      for (let dy = -r; dy <= r; dy++) { const yy = y + dy; if (yy < 0 || yy >= H) continue;
+        for (let dx = -r; dx <= r; dx++) { const xx = x + dx; if (xx >= 0 && xx < W) out[yy * W + xx] = 1; } }
+    }
+    return out;
+  }
+
+  // pixels that differ from the background (moving things), cleaned of speckle
+  function motionMask(frame, bg, W, H, thr) {
+    thr = thr || 28;
+    const raw = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) {
+      const j = i * 3;
+      const d = Math.max(Math.abs(frame.rgb[j] - bg.rgb[j]), Math.abs(frame.rgb[j + 1] - bg.rgb[j + 1]), Math.abs(frame.rgb[j + 2] - bg.rgb[j + 2]));
+      if (d > thr) raw[i] = 1;
+    }
+    const clean = new Uint8Array(W * H);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x; if (!raw[i]) continue;
+      let c = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) c += raw[i + dy * W + dx];
+      if (c >= 6) clean[i] = 1;
+    }
+    return dilate(clean, W, H, 1);
+  }
+
+  // semantic-segmentation output -> Uint8 mask at W x H for the listed labels
+  const MOVER_LABELS = /^(person|car|bus|truck|van|bicycle|minibike|motorbike|motorcycle|animal|boat|ship|airplane|rider|train)$/i;
+  function maskFromSegments(segs, W, H, dilateR) {
+    const m = new Uint8Array(W * H); let any = 0;
+    for (const sgm of segs || []) {
+      const lab = String(sgm.label || '').split(/[;,]/)[0].trim();
+      if (!MOVER_LABELS.test(lab) || !sgm.mask) continue;
+      const mk = sgm.mask, mw = mk.width, mh = mk.height, ch = mk.channels || 1;
+      for (let y = 0; y < H; y++) {
+        const sy = Math.min(mh - 1, Math.floor((y + 0.5) * mh / H));
+        for (let x = 0; x < W; x++) {
+          const sx = Math.min(mw - 1, Math.floor((x + 0.5) * mw / W));
+          if (mk.data[(sy * mw + sx) * ch] > 127) { m[y * W + x] = 1; any++; }
+        }
+      }
+    }
+    return any ? dilate(m, W, H, dilateR == null ? 2 : dilateR) : null;
+  }
+  function orMasks(a, b) { if (!a) return b; if (!b) return a; const o = new Uint8Array(a.length); for (let i = 0; i < a.length; i++) o[i] = a[i] | b[i]; return o; }
+
+  // live layer: 3D points of selected pixels of one frame, placed with that frame's pose + shot alignment
+  function framePoints(frame, W, H, K, align, offset, select, params) {
+    const P = Object.assign({ step: 2, far: 0.06, eps: 0.06, edge: 1.12 }, params);
+    const pose = poseToThree(frame.R, frame.t), M = pose.M, Cc = pose.C, AM = align.M, AT = align.T, inv16 = 1 / 65535;
+    const pos = [], col = [];
+    for (let y = 0; y < H - P.step; y += P.step) for (let x = 0; x < W - P.step; x += P.step) {
+      const i = y * W + x;
+      if (select && !select[i]) continue;
+      const d = frame.dn[i] * inv16; if (d < P.far) continue;
+      const z = frame.s / (d + P.eps), z1 = frame.s / (frame.dn[i + P.step] * inv16 + P.eps), z2 = frame.s / (frame.dn[i + P.step * W] * inv16 + P.eps);
+      if (z / z1 > P.edge || z1 / z > P.edge || z / z2 > P.edge || z2 / z > P.edge) continue;
+      const cx = (x - K.cx) / K.fx * z, cy = -(y - K.cy) / K.fy * z, cz = -z;
+      const wx = M[0] * cx + M[1] * cy + M[2] * cz + Cc[0], wy = M[3] * cx + M[4] * cy + M[5] * cz + Cc[1], wz = M[6] * cx + M[7] * cy + M[8] * cz + Cc[2];
+      pos.push(AM[0] * wx + AM[1] * wy + AM[2] * wz + AT[0] + offset[0], AM[3] * wx + AM[4] * wy + AM[5] * wz + AT[1] + offset[1], AM[6] * wx + AM[7] * wy + AM[8] * wz + AT[2] + offset[2]);
+      col.push(SRGB2LIN[frame.rgb[i * 3]], SRGB2LIN[frame.rgb[i * 3 + 1]], SRGB2LIN[frame.rgb[i * 3 + 2]]);
+    }
+    return { pos: Float32Array.from(pos), col: Float32Array.from(col), count: pos.length / 3 };
+  }
+
+  G.RetraceCore = {
+    bilinear, globalShift, rgbToGray, rgbaToRgb, buildPyramid, detectFeatures, trackLK, I3, mul3, mv3, tr3, expSO3,
+    refinePose, ransacPnP, countInliers, median, resample, normalizeDisparity, trackStep, eigSym3, fitGroundPlane, makeRng,
+    matToQuat, poseToThree, computeAlignment, buildWorld, voxelize, smoothPath, SRGB2LIN,
+    colorHist, histDiff, isCut, cameraSpread, isStill, medianBackground, dilate, motionMask, maskFromSegments, orMasks, framePoints
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+const C = window.RetraceCore;
+const TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
+const DEPTH_MODEL = 'onnx-community/depth-anything-v2-small';
+const SEG_MODEL = 'Xenova/segformer-b0-finetuned-ade-512-512';
+const EPS = 0.06, WORK_LONG = 360, DEPTH_LONG = 640, SCENE_SCALE = 10, SHOT_GAP = SCENE_SCALE * 1.5;
+const $ = id => document.getElementById(id);
+const S = { frames: [], segs: [], path: [], pipe: null, segPipe: null, RawImage: null, device: null };
+window.__retrace = S; // handy for debugging from the console
+
+// ---------- toast ----------
+let toastT;
+function toast(msg, kind = '', ms = 3200) {
+  const t = $('toast'); t.textContent = msg; t.className = 'show ' + kind;
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = kind, ms);
+}
+window.addEventListener('error', e => toast('Error: ' + (e.message || e), 'err', 6000));
+window.addEventListener('unhandledrejection', e => toast('Error: ' + (e.reason?.message || e.reason), 'err', 6000));
+
+// ---------- setup screen ----------
+const vid = $('vid');
+for (const [id, fmt] of [['fps', v => v], ['maxf', v => v], ['fov', v => v + '°']]) {
+  const el = $(id), out = $(id + 'V'); const upd = () => out.textContent = fmt(el.value); el.oninput = upd; upd();
+}
+$('file').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (S.url) URL.revokeObjectURL(S.url);
+  S.url = URL.createObjectURL(f); S.fileName = f.name.replace(/\.[^.]+$/, '');
+  vid.src = S.url; vid.classList.remove('hidden'); vid.controls = true;
+  $('go').disabled = true;
+  toast('Loading video…');
+};
+vid.onloadedmetadata = () => {
+  if (!isFinite(vid.duration) || !vid.videoWidth) { toast("This video's length or size can't be read. Try another file.", 'err'); return; }
+  $('tstart').value = 0; $('tend').value = vid.duration.toFixed(1);
+  $('go').disabled = false;
+  toast(`Video ready: ${vid.videoWidth}×${vid.videoHeight}, ${vid.duration.toFixed(1)} s`);
+};
+vid.onerror = () => { if (vid.src) toast("This browser can't decode that video. Try an MP4 (H.264).", 'err', 6000); };
+$('go').onclick = () => run().catch(err => { console.error(err); toast('Failed: ' + err.message, 'err', 8000); show('setup'); vid.controls = true; releaseWake(); });
+
+function show(which) { for (const id of ['setup', 'proc', 'viewer']) $(id).classList.toggle('hidden', id !== which); }
+
+// ---------- models (free, from Hugging Face, run on-device) ----------
+async function getModels(pref, wantSeg) {
+  $('pstat').textContent = 'Loading Transformers.js…';
+  const T = S.T || (S.T = await import(TF_URL));
+  T.env.allowLocalModels = false;
+  S.RawImage = T.RawImage;
+  let gpu = false;
+  if (pref !== 'wasm' && navigator.gpu) { try { gpu = !!(await navigator.gpu.requestAdapter()); } catch { gpu = false; } }
+  const files = {};
+  const progress_callback = label => d => {
+    if (d.status === 'progress' && d.total) {
+      files[d.file] = [d.loaded, d.total];
+      let l = 0, t = 0; for (const k in files) { l += files[k][0]; t += files[k][1]; }
+      $('pstat').textContent = `Downloading ${label}… ${(l / 1e6).toFixed(1)} / ${(t / 1e6).toFixed(1)} MB`;
+      $('pbar').style.width = (100 * l / t).toFixed(1) + '%';
+    }
+  };
+  const load = async (task, model, label) => {
+    if (gpu) {
+      try { return { p: await T.pipeline(task, model, { device: 'webgpu', dtype: 'fp32', progress_callback: progress_callback(label) }), dev: 'GPU' }; }
+      catch (e) { console.warn('WebGPU failed for', model, e); }
+    }
+    return { p: await T.pipeline(task, model, { device: 'wasm', dtype: 'q8', progress_callback: progress_callback(label) }), dev: 'CPU' };
+  };
+  if (!S.pipe || S.pipePref !== pref) {
+    const r = await load('depth-estimation', DEPTH_MODEL, 'depth model');
+    S.pipe = r.p; S.device = r.dev; S.pipePref = pref;
+    if (gpu && r.dev === 'CPU') toast('GPU not usable, so using CPU instead (slower)', 'warn');
+  }
+  if (wantSeg && (!S.segPipe || S.segPref !== pref)) {
+    try { S.segPipe = (await load('image-segmentation', SEG_MODEL, 'people/vehicle model')).p; S.segPref = pref; }
+    catch (e) { console.warn(e); S.segPipe = null; toast("Couldn't load the people/vehicle model, so continuing without it", 'warn', 5000); }
+  }
+}
+
+// ---------- helpers ----------
+function seekTo(t) {
+  return new Promise(res => {
+    let done = false;
+    const fin = () => { if (done) return; done = true; vid.removeEventListener('seeked', fin); res(); };
+    vid.addEventListener('seeked', fin);
+    vid.currentTime = t;
+    setTimeout(fin, 5000);
+  });
+}
+let wake = null;
+async function holdWake() { try { wake = await navigator.wakeLock?.request('screen'); } catch { } }
+function releaseWake() { try { wake?.release(); } catch { } wake = null; }
+const I3 = () => C.I3();
+
+// ---------- processing ----------
+let cancelFlag = false;
+$('cancel').onclick = () => { cancelFlag = true; $('cancel').disabled = true; $('pstat').textContent = 'Stopping after this frame…'; };
+
+async function run() {
+  if (!vid.src || !vid.videoWidth) { toast('Pick a video first', 'err'); return; }
+  const fps = +$('fps').value, maxF = +$('maxf').value, fov = +$('fov').value;
+  const wantSeg = $('rmMovers').checked, useCuts = $('cuts').checked;
+  let t0 = Math.max(0, +$('tstart').value || 0), t1 = +$('tend').value || vid.duration;
+  t1 = Math.min(t1, vid.duration - 0.05);
+  if (t1 - t0 < 0.5) { toast('Clip is too short. Check Start/End.', 'err'); return; }
+  const times = [];
+  for (let t = t0; t <= t1 + 1e-6 && times.length < maxF; t += 1 / fps) times.push(+t.toFixed(4));
+  if (times.length >= maxF && times[times.length - 1] < t1 - 1 / fps)
+    toast(`Using the first ${(times.length / fps).toFixed(1)} s (max frames). Raise Max frames or lower fps for more.`, 'warn', 5000);
+
+  cancelFlag = false; $('cancel').disabled = false;
+  vid.pause(); vid.controls = false;
+  show('proc'); holdWake();
+  $('pbar').style.width = '0%'; $('pdet').textContent = '';
+
+  const vw = vid.videoWidth, vh = vid.videoHeight;
+  const sc = WORK_LONG / Math.max(vw, vh), W = Math.round(vw * sc / 2) * 2, H = Math.round(vh * sc / 2) * 2;
+  const dsc = DEPTH_LONG / Math.max(vw, vh), dW = Math.round(vw * dsc), dH = Math.round(vh * dsc);
+  const f = (Math.max(W, H) / 2) / Math.tan(fov * Math.PI / 360);
+  const K = { fx: f, fy: f, cx: W / 2, cy: H / 2 };
+
+  await getModels($('dq').value, wantSeg);
+  const segPipe = wantSeg ? S.segPipe : null;
+
+  const wc = document.createElement('canvas'); wc.width = W; wc.height = H;
+  const wctx = wc.getContext('2d', { willReadFrequently: true });
+  const dc = document.createElement('canvas'); dc.width = dW; dc.height = dH;
+  const dctx = dc.getContext('2d', { willReadFrequently: true });
+  const pc = $('pcan'); pc.width = W * 2; pc.height = H;
+  const pctx = pc.getContext('2d');
+
+  const frames = [];
+  let prev = null, prevHist = null, lastRel = { R: I3(), t: [0, 0, 0] }, fails = 0, shot = 0, segWarned = false, sky = null;
+  const tStart = performance.now();
+  for (let i = 0; i < times.length; i++) {
+    if (cancelFlag) break;
+    await seekTo(times[i]);
+    wctx.drawImage(vid, 0, 0, W, H);
+    const wimg = wctx.getImageData(0, 0, W, H), rgb = C.rgbaToRgb(wimg.data);
+    dctx.drawImage(vid, 0, 0, dW, dH);
+    const drgb = C.rgbaToRgb(dctx.getImageData(0, 0, dW, dH).data);
+    const img = new S.RawImage(drgb, dW, dH, 3);
+
+    const out = await S.pipe(img);
+    const pd = out.predicted_depth, dims = pd.dims, ph = dims[dims.length - 2], pw = dims[dims.length - 1];
+    const dn = C.normalizeDisparity(C.resample(pd.data, pw, ph, W, H));
+    let mask = null;
+    if (segPipe) {
+      try { mask = C.maskFromSegments(await segPipe(img), W, H, 2); }
+      catch (e) { if (!segWarned) { segWarned = true; console.warn(e); toast('People/vehicle detection failed on a frame, so skipping it there', 'warn'); } }
+    }
+    const pyr = C.buildPyramid(C.rgbToGray(rgb, W, H), W, H, 4);
+    const hist = C.colorHist(rgb);
+
+    let R, t, s, r = null, info = '', newShot = !prev;
+    if (prev) {
+      r = C.trackStep(prev, { pyr, dn, mask }, K, lastRel, EPS, { seed: i * 7 + 1 });
+      const hd = C.histDiff(prevHist, hist);
+      if (useCuts && C.isCut(hd, r)) { newShot = true; shot++; r = null; info = `✂ New shot ${shot + 1} starts here`; }
+    }
+    if (newShot) {
+      const zs = []; for (let k = 0; k < dn.length; k += 11) if (dn[k] > 0.05 && !(mask && mask[k])) zs.push(1 / (dn[k] + EPS));
+      s = SCENE_SCALE / (C.median(zs) || 1); R = I3(); t = [0, 0, 0]; lastRel = { R: I3(), t: [0, 0, 0] };
+      if (!sky) { // sky colour = average of far pixels in the top half of the first frame
+        let sr = 0, sg = 0, sb = 0, n = 0;
+        for (let k = 0; k < W * H / 2; k++) if (dn[k] < 0.02) { sr += rgb[3 * k]; sg += rgb[3 * k + 1]; sb += rgb[3 * k + 2]; n++; }
+        sky = n > 200 ? [sr / n, sg / n, sb / n] : [150, 180, 210];
+      }
+    } else {
+      if (r.ok) lastRel = r.rel; else fails++;
+      R = r.R; t = r.t; s = r.s;
+      info = `${r.nTracks} tracked points · ${r.nIn} agree${r.ok ? '' : ' · ⚠ lost track, guessing motion'}`;
+    }
+    frames.push({ time: times[i], rgb, dn: Uint16Array.from(dn, v => Math.round(v * 65535)), s, R, t, seg: shot, mask });
+    prev = { pyr, dn, s, R, t, mask }; prevHist = hist;
+
+    // preview
+    if (mask) for (let k = 0; k < W * H; k++) if (mask[k]) { const d = wimg.data; d[4 * k] = (d[4 * k] + 255) >> 1; d[4 * k + 1] >>= 1; d[4 * k + 2] >>= 1; }
+    pctx.putImageData(wimg, 0, 0);
+    if (r) {
+      pctx.lineWidth = 1;
+      for (let k = 0; k < r.src.length / 2; k++) {
+        pctx.strokeStyle = r.inliers[k] ? '#38e1c6' : '#ff5f6d';
+        pctx.beginPath(); pctx.moveTo(r.src[2 * k], r.src[2 * k + 1]); pctx.lineTo(r.dst[2 * k], r.dst[2 * k + 1]); pctx.stroke();
+      }
+    }
+    const dimg = pctx.createImageData(W, H);
+    for (let k = 0; k < W * H; k++) { const v = Math.sqrt(dn[k]) * 255; dimg.data[4 * k] = v * 0.6; dimg.data[4 * k + 1] = v; dimg.data[4 * k + 2] = v * 0.9 + 20; dimg.data[4 * k + 3] = 255; }
+    pctx.putImageData(dimg, W, 0);
+
+    const el = (performance.now() - tStart) / 1000, per = el / (i + 1), left = per * (times.length - i - 1);
+    $('pbar').style.width = (100 * (i + 1) / times.length).toFixed(1) + '%';
+    $('pstat').textContent = `Frame ${i + 1} / ${times.length} · ${S.device} · ${per.toFixed(1)} s/frame · ~${Math.ceil(left)} s left`;
+    $('pdet').textContent = (info || 'First frame sets the scale') + (shot ? ` · shot ${shot + 1}` : '');
+  }
+  releaseWake();
+  if (frames.length < 2) { toast('Not enough frames were processed.', 'err'); show('setup'); vid.controls = true; return; }
+
+  // ---- shots: split, detect still cameras, build diorama backgrounds ----
+  $('pstat').textContent = 'Sorting out shots…';
+  await new Promise(r => setTimeout(r, 30));
+  const segs = [];
+  frames.forEach((fr, i) => { if (!segs.length || segs[segs.length - 1].id !== fr.seg) segs.push({ id: fr.seg, start: i, end: i + 1 }); else segs[segs.length - 1].end = i + 1; });
+  let moving = 0, movingFails = 0;
+  for (const sg of segs) {
+    const list = frames.slice(sg.start, sg.end);
+    sg.still = C.isStill(list, SCENE_SCALE);
+    if (sg.still) {
+      for (const fr of list) { fr.R = I3(); fr.t = [0, 0, 0]; } // tripod: lock the camera, drop the jitter
+      sg.bg = C.medianBackground(list, W, H, 41);
+    } else moving += list.length;
+    sg.align = null; sg.offset = [0, 0, 0]; sg.live = new Map();
+  }
+  if (moving && fails > moving * 0.3) toast(`Tracking was lost on ${fails} frames, so the path may wobble. Try a slower walk or a different FOV.`, 'warn', 7000);
+
+  Object.assign(S, { frames, segs, W, H, K, fps, t0: times[0], vfov: 2 * Math.atan((H / 2) / K.fy) * 180 / Math.PI, sky, hasMasks: frames.some(f => f.mask) });
+  enterViewer();
+  const still = segs.filter(s => s.still).length;
+  if (segs.length > 1 || still) toast(`Found ${segs.length} shot${segs.length > 1 ? 's' : ''}${still ? ` (${still} still-camera → diorama)` : ''}. Tap the shot buttons to jump.`, '', 6000);
+}
+
+// ---------- viewer ----------
+let renderer, scene, camera, controls, grid, pathGroup, marker, world, live, clock = performance.now();
+let mode = 'ride', style = 'voxels', playing = false, idx = 0, recording = null, lastSeg = -1, liveKey = '';
+const chaseLook = new THREE.Vector3();
+
+function initThree() {
+  if (renderer) return;
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  $('stage').appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(60, 1, 0.05, 1000);
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.enabled = false;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(30, 60, 20); scene.add(sun);
+  grid = new THREE.GridHelper(400, 400, 0x38e1c6, 0x1d2a3d); grid.material.transparent = true; grid.material.opacity = 0.35; grid.visible = false; scene.add(grid);
+  pathGroup = new THREE.Group(); scene.add(pathGroup);
+  marker = new THREE.Group();
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 4), new THREE.MeshBasicMaterial({ color: 0xffb347, wireframe: true }));
+  cone.rotation.x = -Math.PI / 2; cone.position.z = -0.4; marker.add(cone);
+  marker.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffb347 })));
+  scene.add(marker);
+  live = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 0.12, vertexColors: true, sizeAttenuation: true }));
+  live.name = 'retrace-live'; scene.add(live); S.live = live;
+  addEventListener('resize', resize); resize();
+  renderer.setAnimationLoop(tick);
+}
+function resize() {
+  if (!renderer) return;
+  renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+}
+
+function enterViewer() {
+  show('viewer'); initThree();
+  $('inset').appendChild(vid); vid.classList.remove('hidden'); vid.controls = false;
+  vid.muted = true; $('bSound').textContent = '🔇';
+  $('scrub').max = S.frames.length - 1; idx = 0; $('scrub').value = 0; lastSeg = -1;
+  $('useMask').disabled = !S.hasMasks;
+  buildShotChips();
+  buildScene();
+  setMode('ride');
+  seekVideo();
+  toast('Done! Press ▶ to retrace the video. Use Orbit to look around.', '', 4500);
+}
+
+function buildShotChips() {
+  const box = $('shots'); box.innerHTML = '';
+  box.classList.toggle('hidden', S.segs.length < 2);
+  S.segs.forEach((sg, k) => {
+    const b = document.createElement('button');
+    b.textContent = `Shot ${k + 1}${sg.still ? ' ◉' : ''}`; b.title = sg.still ? 'Still camera: diorama' : 'Moving camera';
+    b.onclick = () => { idx = sg.start; $('scrub').value = idx; seekVideo(); if (playing) vid.play().catch(() => { }); toast(`Shot ${k + 1}${sg.still ? ': diorama (still camera)' : ''}`); };
+    box.appendChild(b);
+  });
+}
+
+function readParams() {
+  const p = { voxel: +$('vox').value, far: +$('far').value, minHits: +$('hits').value, levels: +$('pal').value, stride: +$('str').value, eps: EPS, sceneScale: SCENE_SCALE, useMask: $('useMask').checked };
+  $('voxV').textContent = p.voxel.toFixed(2); $('farV').textContent = p.far.toFixed(2); $('hitsV').textContent = p.minHits;
+  $('palV').textContent = p.levels ? p.levels + ' levels' : 'off'; $('strV').textContent = p.stride; $('smV').textContent = $('sm').value;
+  return p;
+}
+
+function disposeTree(o) { o.traverse?.(c => { c.geometry?.dispose(); c.material?.dispose?.(); }); }
+
+function xRange(pos, fallback) { // robust x extent of a point set
+  const n = pos.length / 3; if (n < 20) return fallback;
+  const step = Math.max(1, Math.floor(n / 4000)), xs = [];
+  for (let k = 0; k < n; k += step) xs.push(pos[3 * k]);
+  xs.sort((a, b) => a - b);
+  return [xs[Math.floor(xs.length * 0.02)], xs[Math.floor(xs.length * 0.98)]];
+}
+
+function buildScene() {
+  const t0 = performance.now();
+  const p = readParams();
+  if (world) { scene.remove(world); disposeTree(world); }
+  world = new THREE.Group(); world.name = 'retrace-street';
+  let cursorX = 0, blocks = 0, pts = 0, planeMissing = 0;
+  S.segs.forEach((sg, k) => {
+    const list = sg.still ? [sg.bg] : S.frames.slice(sg.start, sg.end);
+    const w = C.buildWorld(list, S.W, S.H, S.K, p, sg.align);
+    sg.align = w.align;
+    if (!w.align.planeFound) planeMissing++;
+    // lay shots out side by side along +X so they never overlap
+    const pathX = w.path.map(q => q.p[0]);
+    const [lo, hi] = xRange(w.points.pos, [Math.min(...pathX) - 2, Math.max(...pathX) + 2]);
+    const ox = k === 0 ? 0 : cursorX - Math.min(lo, ...pathX);
+    cursorX = ox + Math.max(hi, ...pathX) + SHOT_GAP;
+    sg.offset = [ox, 0, 0];
+    if (ox) {
+      for (let i = 0; i < w.voxels.position.length; i += 3) w.voxels.position[i] += ox;
+      for (let i = 0; i < w.points.pos.length; i += 3) w.points.pos[i] += ox;
+    }
+    const raw = sg.still ? Array.from({ length: sg.end - sg.start }, () => w.path[0]) : w.path;
+    sg.rawPath = raw.map(q => ({ p: [q.p[0] + ox, q.p[1], q.p[2]], q: q.q }));
+    const g = new THREE.BufferGeometry();
+    let obj;
+    if (style === 'voxels') {
+      g.setAttribute('position', new THREE.BufferAttribute(w.voxels.position, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(w.voxels.normal, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(w.voxels.color, 3));
+      g.setIndex(new THREE.BufferAttribute(w.voxels.index, 1));
+      obj = new THREE.Mesh(g, $('lit').checked ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshBasicMaterial({ vertexColors: true }));
+    } else {
+      g.setAttribute('position', new THREE.BufferAttribute(w.points.pos, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(w.points.col, 3));
+      obj = new THREE.Points(g, new THREE.PointsMaterial({ size: Math.max(0.03, p.voxel * 0.6), vertexColors: true, sizeAttenuation: true }));
+    }
+    obj.name = `shot-${k + 1}${sg.still ? '-diorama' : ''}`;
+    world.add(obj);
+    blocks += w.voxels.count; pts += w.points.count;
+    sg.live.clear();
+  });
+  scene.add(world); S.world = world;
+  if (planeMissing && !S.warnedPlane) { S.warnedPlane = true; toast(`Couldn't find a clear ground plane in ${planeMissing} shot(s), so the level may be off.`, 'warn', 5000); }
+  applySmoothing();
+  const skyC = new THREE.Color().setRGB(...S.sky.map(v => v / 255), THREE.SRGBColorSpace);
+  scene.background = skyC;
+  scene.fog = $('fogOn').checked ? new THREE.Fog(skyC, SCENE_SCALE * 1.5, SCENE_SCALE * 7) : null;
+  grid.visible = $('showGrid').checked && mode !== 'ride';
+  live.material.size = Math.max(0.03, p.voxel * 0.45);
+  liveKey = '';
+  const still = S.segs.filter(s => s.still).length;
+  $('stats').textContent = `${S.frames.length} frames · ${S.segs.length} shot${S.segs.length > 1 ? 's' : ''}${still ? ` (${still} diorama)` : ''} · ${blocks.toLocaleString()} blocks · ${pts.toLocaleString()} points${S.hasMasks ? ' · people/vehicles detected' : ''} · built in ${Math.round(performance.now() - t0)} ms`;
+}
+
+function applySmoothing() {
+  const sm = +$('sm').value;
+  S.path = [];
+  pathGroup.children.slice().forEach(c => { pathGroup.remove(c); c.geometry.dispose(); });
+  for (const sg of S.segs) {
+    const seg = (sg.still ? sg.rawPath : C.smoothPath(sg.rawPath, sm)).map(x => ({ p: new THREE.Vector3(...x.p), q: new THREE.Quaternion(...x.q) }));
+    S.path.push(...seg);
+    sg.center = seg.reduce((a, x) => a.add(x.p), new THREE.Vector3()).multiplyScalar(1 / seg.length);
+    if (!sg.still) pathGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(seg.map(x => x.p)), new THREE.LineBasicMaterial({ color: 0xffb347 })));
+  }
+  pathGroup.visible = $('showPath').checked && mode !== 'ride';
+}
+
+let rebuildT;
+for (const id of ['vox', 'far', 'hits', 'pal', 'str']) $(id).oninput = () => { readParams(); clearTimeout(rebuildT); rebuildT = setTimeout(() => { buildScene(); toast('Rebuilt'); }, 300); };
+$('sm').oninput = () => { readParams(); applySmoothing(); };
+$('lit').onchange = buildScene; $('fogOn').onchange = buildScene; $('useMask').onchange = () => { buildScene(); toast($('useMask').checked ? 'People/vehicles cut out of the blocks' : 'People/vehicles kept in the blocks'); };
+$('showPath').onchange = () => pathGroup.visible = $('showPath').checked && mode !== 'ride';
+$('showGrid').onchange = () => grid.visible = $('showGrid').checked && mode !== 'ride';
+$('liveOn').onchange = () => { liveKey = ''; toast($('liveOn').checked ? 'Live layer on' : 'Live layer off'); };
+$('sway').onchange = () => toast($('sway').checked ? 'Diorama sway on (Ride view, still shots)' : 'Diorama sway off');
+
+const segAt = x => S.frames[Math.max(0, Math.min(S.frames.length - 1, Math.round(x)))].seg;
+const segIndex = id => S.segs.findIndex(s => s.id === id);
+
+function frameCenter(k) { // what orbit / chase should frame for shot k
+  const sg = S.segs[k], box = new THREE.Box3().setFromPoints(S.path.slice(sg.start, sg.end).map(x => x.p));
+  const c = box.getCenter(new THREE.Vector3());
+  if (sg.still) { const q = S.path[sg.start]; c.copy(q.p).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(q.q), SCENE_SCALE * 0.8); }
+  return { c, size: Math.max(box.getSize(new THREE.Vector3()).length(), SCENE_SCALE) };
+}
+
+function setMode(m) {
+  mode = m;
+  for (const b of $('modeSeg').children) b.classList.toggle('on', b.dataset.m === m);
+  controls.enabled = m === 'orbit';
+  marker.visible = m !== 'ride';
+  pathGroup.visible = $('showPath').checked && m !== 'ride';
+  grid.visible = $('showGrid').checked && m !== 'ride';
+  camera.fov = m === 'ride' ? S.vfov : 60; camera.updateProjectionMatrix();
+  if (m === 'orbit') {
+    const { c, size } = frameCenter(segIndex(segAt(idx)));
+    controls.target.copy(c);
+    camera.position.set(c.x + size * 0.8, c.y + size * 0.9, c.z + size * 0.6);
+    controls.update();
+  }
+  if (m === 'chase') snapChase = true;
+}
+let snapChase = true;
+$('modeSeg').onclick = e => { const m = e.target.dataset?.m; if (m) setMode(m); };
+$('styleSeg').onclick = e => {
+  const s = e.target.dataset?.s; if (!s || s === style) return;
+  style = s; for (const b of $('styleSeg').children) b.classList.toggle('on', b.dataset.s === s);
+  buildScene();
+};
+
+function poseAt(x) {
+  const n = S.path.length, i0 = Math.max(0, Math.min(n - 1, Math.floor(x))), i1 = Math.min(n - 1, i0 + 1);
+  let a = Math.max(0, Math.min(1, x - i0));
+  if (S.frames[i0].seg !== S.frames[i1].seg) a = 0; // never blend across a cut
+  return { p: new THREE.Vector3().lerpVectors(S.path[i0].p, S.path[i1].p, a), q: new THREE.Quaternion().slerpQuaternions(S.path[i0].q, S.path[i1].q, a) };
+}
+
+// live layer: people/vehicles (and, in dioramas, anything that moves) from the current frame, in 3D
+function updateLive(fi) {
+  const on = $('liveOn').checked, fr = S.frames[fi], k = segIndex(fr.seg), sg = S.segs[k];
+  const key = on ? `${fi}|${style}` : 'off';
+  if (key === liveKey) return;
+  liveKey = key;
+  let pts = null;
+  if (on && sg.align) {
+    let sel = sg.live.get(fi);
+    if (sel === undefined) {
+      sel = sg.still ? C.orMasks(C.motionMask(fr, sg.bg, S.W, S.H), fr.mask) : fr.mask;
+      if (sg.live.size > 400) sg.live.clear();
+      sg.live.set(fi, sel);
+    }
+    if (sel) pts = C.framePoints(fr, S.W, S.H, S.K, sg.align, sg.offset, sel, { far: +$('far').value, eps: EPS });
+  }
+  live.geometry.dispose();
+  const g = new THREE.BufferGeometry();
+  if (pts && pts.count) { g.setAttribute('position', new THREE.BufferAttribute(pts.pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(pts.col, 3)); }
+  live.geometry = g; live.visible = !!(pts && pts.count);
+}
+
+// playback: the original video is the clock, so 3D and video stay in sync
+function seekVideo() { vid.currentTime = S.t0 + idx / S.fps; }
+function setPlaying(p) {
+  playing = p; $('play').textContent = p ? '❚❚' : '▶';
+  if (p) {
+    if (idx >= S.frames.length - 1.01) idx = 0;
+    seekVideo();
+    vid.play().catch(() => { /* fall back to internal clock */ });
+  } else vid.pause();
+}
+$('play').onclick = () => setPlaying(!playing);
+$('scrub').oninput = () => { if (playing) setPlaying(false); idx = +$('scrub').value; seekVideo(); };
+
+function tick() {
+  const now = performance.now(), dt = Math.min(0.1, (now - clock) / 1000); clock = now;
+  const N = S.frames.length;
+  if (playing) {
+    if (!vid.paused && vid.readyState >= 2) idx = (vid.currentTime - S.t0) * S.fps;
+    else idx += dt * S.fps;
+    if (idx >= N - 1) {
+      if (recording) { idx = N - 1; stopRecording(); setPlaying(false); }
+      else { idx = 0; seekVideo(); }
+    }
+    $('scrub').value = idx;
+  }
+  $('tlabel').textContent = (idx / S.fps).toFixed(1) + ' s';
+  const fi = Math.max(0, Math.min(N - 1, Math.round(idx))), segId = S.frames[fi].seg, k = segIndex(segId), sg = S.segs[k];
+  const pose = poseAt(idx);
+  if (segId !== lastSeg) { // entering a new shot
+    if (lastSeg !== -1 && mode === 'orbit') {
+      const a = frameCenter(segIndex(lastSeg)).c, b = frameCenter(k).c, d = b.sub(a);
+      camera.position.add(d); controls.target.add(d);
+    }
+    snapChase = true;
+    [...$('shots').children].forEach((b, j) => b.classList.toggle('on', j === k));
+    lastSeg = segId;
+  }
+  updateLive(fi);
+  marker.position.copy(pose.p); marker.quaternion.copy(pose.q);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(pose.q);
+  if (mode === 'ride') {
+    camera.position.copy(pose.p); camera.quaternion.copy(pose.q);
+    if (sg.still && $('sway').checked) { // gentle parallax so a tripod shot reads as 3D
+      const tt = now / 1000, right = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.q);
+      const pivot = pose.p.clone().addScaledVector(fwd, SCENE_SCALE * 0.8);
+      camera.position.addScaledVector(right, Math.sin(tt * 0.7) * SCENE_SCALE * 0.08).add(new THREE.Vector3(0, Math.sin(tt * 0.45) * SCENE_SCALE * 0.03, 0));
+      camera.lookAt(pivot);
+    }
+  } else if (mode === 'chase') {
+    const flat = fwd.clone(); flat.y = 0;
+    if (flat.lengthSq() < 1e-4) flat.set(0, 0, -1); flat.normalize();
+    const want = pose.p.clone().addScaledVector(flat, -SCENE_SCALE * 0.35).add(new THREE.Vector3(0, SCENE_SCALE * 0.18, 0));
+    const look = pose.p.clone().addScaledVector(flat, SCENE_SCALE * 0.3);
+    const kk = snapChase ? 1 : 1 - Math.exp(-dt * 4); snapChase = false;
+    camera.position.lerp(want, kk); chaseLook.lerp(look, kk);
+    camera.lookAt(chaseLook);
+  } else controls.update();
+  renderer.render(scene, camera);
+}
+
+// ---------- top bar ----------
+$('bInset').onclick = () => { const on = $('inset').classList.toggle('hidden'); $('bInset').classList.toggle('on', !on); };
+$('bSound').onclick = () => { vid.muted = !vid.muted; $('bSound').textContent = vid.muted ? '🔇' : '🔊'; toast(vid.muted ? 'Sound off' : 'Sound on'); };
+$('bSet').onclick = () => { readParams(); $('sheet').classList.toggle('hidden'); };
+$('bClose').onclick = () => $('sheet').classList.add('hidden');
+$('bNew').onclick = () => {
+  if (recording) { toast('Stop the recording first', 'warn'); return; }
+  setPlaying(false);
+  $('vidHome').appendChild(vid); vid.controls = true;
+  show('setup'); toast('Pick a new video, or change settings and rebuild');
+};
+
+// ---------- exports ----------
+function download(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const baseName = () => 'retrace-' + (S.fileName || 'street').replace(/[^\w-]+/g, '_').slice(0, 40);
+
+$('bGlb').onclick = () => {
+  toast('Exporting 3D model…');
+  new GLTFExporter().parse(world, res => { download(new Blob([res], { type: 'model/gltf-binary' }), baseName() + '.glb'); toast(`Saved .glb with ${S.segs.length} shot${S.segs.length > 1 ? 's' : ''} (open in Blender or any 3D viewer)`); },
+    err => toast('GLB export failed: ' + err.message, 'err', 6000), { binary: true });
+};
+$('bPath').onclick = () => {
+  const data = {
+    app: 'Retrace', units: 'scene units (arbitrary scale; ground at y=0)', coords: 'three.js / glTF: Y up, camera looks down -Z',
+    fps: S.fps, videoStart: S.t0, verticalFovDeg: +S.vfov.toFixed(3),
+    shots: S.segs.map((s, k) => ({ shot: k + 1, firstFrame: s.start, lastFrame: s.end - 1, stillCamera: s.still, offset: s.offset })),
+    frames: S.path.map((x, i) => ({ i, shot: segIndex(S.frames[i].seg) + 1, t: +(S.t0 + i / S.fps).toFixed(4), position: x.p.toArray().map(v => +v.toFixed(5)), quaternion: x.q.toArray().map(v => +v.toFixed(6)) }))
+  };
+  download(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }), baseName() + '-path.json');
+  toast('Saved camera path');
+};
+
+$('bRec').onclick = () => {
+  if (recording) { stopRecording(); setPlaying(false); return; }
+  if (!window.MediaRecorder || !renderer.domElement.captureStream) { toast("This browser can't record the canvas", 'err'); return; }
+  const stream = renderer.domElement.captureStream(30);
+  if (!vid.muted) { try { vid.captureStream?.().getAudioTracks().forEach(t => stream.addTrack(t)); } catch { } }
+  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const chunks = [];
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8e6 } : undefined);
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => { download(new Blob(chunks, { type: 'video/webm' }), baseName() + `-${mode}.webm`); toast('Saved fly-through video'); };
+  recording = rec; rec.start(250);
+  $('recdot').classList.remove('hidden'); $('bRec').textContent = '■ Stop recording'; $('sheet').classList.add('hidden');
+  idx = 0; setPlaying(true);
+  toast(`Recording one pass in ${mode} view…`);
+};
+function stopRecording() {
+  if (!recording) return;
+  try { recording.stop(); } catch { }
+  recording = null; $('recdot').classList.add('hidden'); $('bRec').textContent = '● Record fly-through (.webm)';
+}
+
+</script>
+</body>
+</html>
